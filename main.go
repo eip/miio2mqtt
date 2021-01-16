@@ -27,7 +27,6 @@ func init() {
 }
 
 func initDevices() {
-	// now := time.Now()
 	idx := 0
 	for n, dc := range config.C.Devices {
 		idx++
@@ -48,8 +47,6 @@ func initDevices() {
 		d := miio.Device{
 			DeviceCfg: dc,
 			Name:      n,
-			// UpdatedAt:   now.Add(-time.Second),
-			// PushedAt:    now,
 		}
 		token, _ := hex.DecodeString(dc.Token)
 		copy(d.Token[:], token)
@@ -87,8 +84,6 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	startTime := time.Now()
-	log.Printf("[DEBUG] starting [%v]...", startTime)
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
@@ -105,15 +100,25 @@ func run(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Print("[DEBUG] stop processimg mqtt messages")
+				log.Print("[DEBUG] stop processing mqtt messages")
 				return
 			case msg := <-messages:
 				if err := mqtt.Publish(client, msg); err != nil {
-					log.Printf("[WARN] unable to publish to MQTT brocker: %v", err)
+					log.Printf("[WARN] unable to publish to MQTT broker: %v", err)
 				}
 			}
 		}
 	}()
+
+	next := nextTime(time.Now())
+	if next.Sub(time.Now()) < config.C.PollInterval*2/3 {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(next.Sub(time.Now())):
+		}
+	}
+
 	for {
 		listener.Purge()
 		now := time.Now()
@@ -136,141 +141,22 @@ func run(ctx context.Context) error {
 			log.Print("[DEBUG] all devices were updated successfully")
 		}
 		listener.Purge()
+		next := nextTime(time.Now())
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(config.C.PollInterval):
+		case <-time.After(next.Sub(time.Now())):
 		}
 	}
-
-	// devicesLeft, err := net.Discover(ctx, listener, devices)
-	// if err != nil {
-	// 	log.Printf("[DEBUG] %d devices were undiscovered", devicesLeft)
-	// 	// return err
-	// } else {
-	// 	log.Print("[DEBUG] all devices were discovered successfully")
-	// }
-
-	// if devices.Count(miio.DeviceFound) == 0 {
-	// 	log.Print("[DEBUG] no devices were discovered")
-	// 	return nil
-	// }
-
-	// listener.Purge()
-	// devicesLeft, err = net.UpdateInfo(ctx, listener, devices)
-	// if err != nil {
-	// 	log.Printf("[DEBUG] %d devices were not updated", devicesLeft)
-	// 	// return err
-	// } else {
-	// 	log.Print("[DEBUG] all devices were updated successfully")
-	// }
-
-	// if devices.Count(miio.DeviceValid) == 0 {
-	// 	log.Print("[DEBUG] no valid device exist")
-	// 	return nil
-	// }
-
-	// <-ctx.Done()
-	// return nil
-	// startTime = time.Now()
-	// next := startTime.Add(cfg.PollInterval).Truncate(cfg.PollInterval).Add(-cfg.PollAheadTime)
-	// if next.Before(startTime) {
-	// 	next = next.Add(cfg.PollInterval)
-	// }
-	// select {
-	// case <-ctx.Done():
-	// 	return nil
-	// case <-time.After(next.Sub(startTime)):
-	// }
-
-	// ticker := time.NewTicker(time.Duration(cfg.PollInterval))
-	// defer ticker.Stop()
-	// startTime = time.Now()
-	// log.Print("[DEBUG] polling begins")
-	// wg := &sync.WaitGroup{}
-	// process(ctx, wg)
-	// for {
-	// 	select {
-	// 	case <-ticker.C:
-	// 		process(ctx, wg)
-	// 	case <-ctx.Done():
-	// 		wg.Wait()
-	//    return nil
-	// 	}
-	// }
 }
 
-// func process(ctx context.Context, wg *sync.WaitGroup) {
-// 	ctxD, cancelD := context.WithTimeout(ctx, cfg.PollTimeout)
-// 	defer cancelD()
-// 	wg.Add(len(state.devices))
-// 	for _, d := range state.devices {
-// 		go func(d *deviceState) {
-// 			defer wg.Done()
-// 			pollDevice(ctxD, d)
-// 		}(d)
-// 	}
-// 	wg.Wait()
-// 	ctxQ, cancelQ := context.WithTimeout(ctx, cfg.PushTimeout)
-// 	defer cancelQ()
-// 	wg.Add(1)
-// 	go func() {
-// 		defer wg.Done()
-// 		pushToQuery(ctxQ)
-// 	}()
-// 	wg.Wait()
-// }
-
-// func pollDevice(ctx context.Context, ds *deviceState) {
-// 	log.Printf("[DEBUG] polling device %s...", ds.name)
-// 	select {
-// 	case <-ctx.Done():
-// 		log.Printf("[DEBUG] polling device %s timed out", ds.name)
-// 	case <-time.After(time.Millisecond * time.Duration(500+rand.Intn(1000))):
-// 		newValue := fmt.Sprintf(`{"power":%d}`, rand.Intn(2))
-// 		if newValue != ds.value {
-// 			ds.value = newValue
-// 			ds.updatedAt = time.Now()
-// 			log.Printf("[INFO] device %s state: %s", ds.name, ds.value)
-// 		}
-// 		log.Printf("[DEBUG] polling device %s done", ds.name)
-// 	}
-// }
-
-// func pushToQuery(ctx context.Context) {
-// 	log.Print("[DEBUG] pushing results...")
-// 	// cd, _ := ctx.Deadline()
-// 	// log.Printf("[DEBUG] context for query: %v", cd)
-// 	select {
-// 	case <-ctx.Done():
-// 		log.Print("[DEBUG] pushing results timed out")
-// 	case <-time.After(time.Millisecond * time.Duration(500+rand.Intn(1000))):
-// 		for _, ds := range state.devices {
-// 			if state.pushedAt.Before(ds.updatedAt) {
-// 				log.Printf("[INFO] pushed %s to %s", ds.value, ds.properties.Topic)
-// 			}
-// 		}
-// 		state.pushedAt = time.Now()
-// 	}
-// }
-
-// // func devicesToComplete(deviceStates deviceStates) miio.Devices {
-// // 	devices := miio.Devices{}
-// // 	for _, ds := range deviceStates {
-// // 		if ds.properties.TimeShift == 0 || ds.properties.ID == 0 || len(ds.properties.Address) == 0 {
-// // 			devices = append(devices, &ds.properties)
-// // 		}
-// // 	}
-// // 	return devices
-// // }
-
-// func (s appState) getDevices() miio.Devices {
-// 	devices := make(miio.Devices, len(s.devices))
-// 	for i, ds := range s.devices {
-// 		devices[i] = &ds.properties
-// 	}
-// 	return devices
-// }
+func nextTime(now time.Time) time.Time {
+	result := now.Add(config.C.PollInterval).Truncate(config.C.PollInterval).Add(-config.C.PollAheadTime)
+	if result.Before(now) {
+		return result.Add(config.C.PollInterval)
+	}
+	return result
+}
 
 func setupLog(dbg bool) {
 	if dbg {
