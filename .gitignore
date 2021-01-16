@@ -1,0 +1,8 @@
+*
+!/**/
+!*.*
+.idea/
+.vscode/
+.DS_*
+*.code-workspace
+config.yml
