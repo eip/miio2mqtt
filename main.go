@@ -17,7 +17,7 @@ import (
 	log "github.com/go-pkgz/lgr"
 )
 
-// go build -ldflags "-X main.version=`git describe --exact-match --tags 2> /dev/null || git rev-parse --short HEAD`" .
+// go build -ldflags "-s -w -X main.version=`git describe --exact-match --tags 2> /dev/null || git rev-parse --short HEAD`" .
 var version = "development"
 
 var devices = make(miio.Devices)
