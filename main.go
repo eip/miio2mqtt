@@ -26,6 +26,79 @@ func init() {
 	log.Print("[DEBUG] main init()")
 }
 
+func main() {
+	setupLog(false)
+	if err := config.Load("./config.yml"); err != nil {
+		log.Printf("[ERROR] configuration: %v", err)
+		return
+	}
+	if config.C.Debug {
+		setupLog(true)
+	}
+	initDevices()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { // catch signal and invoke graceful termination
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+		s := <-sigChan
+		fmt.Print("\r")
+		log.Printf("[WARN] %v signal received", s)
+		cancel()
+	}()
+	fmt.Printf("miio2mqtt version %s\n", version)
+	if err := run(ctx); err != nil {
+		log.Printf("[ERROR] %v", err)
+		time.Sleep(1 * time.Second)
+		os.Exit(1)
+	}
+	log.Print("[DEBUG] miio2mqtt finished")
+}
+
+func run(ctx context.Context) error {
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	listener, err := net.StartListener(ctx, &wg)
+	if err != nil {
+		return err
+	}
+	defer listener.Stop()
+
+	client := mqtt.NewClient()
+	defer client.Disconnect()
+	messages := make(chan mqtt.Message, 100)
+	go processMessages(ctx, client, messages)
+
+	for {
+		next := nextTime(time.Now())
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(next.Sub(time.Now())):
+		}
+		now := time.Now()
+		devices.SetStage(miio.Undiscovered, func(d *miio.Device) bool {
+			if !miio.DeviceFound(d) {
+				return false
+			}
+			outdated := now.After(d.UpdatedAt.Add(config.C.PollInterval * 2))
+			if outdated {
+				log.Printf("[INFO] outdated %s (updated %v ago)", d.Name, now.Sub(d.UpdatedAt))
+			}
+			return outdated
+		})
+		devices.SetStage(miio.Valid, miio.DeviceUpdated)
+		listener.Purge()
+		err = net.QueryDevices(ctx, listener, devices, messages)
+		if err != nil {
+			log.Printf("[INFO] unable to update all devices: %v", err)
+			// return err
+		} else {
+			log.Print("[DEBUG] all devices were updated successfully")
+		}
+	}
+}
+
 func initDevices() {
 	idx := 0
 	for n, dc := range config.C.Devices {
@@ -55,97 +128,16 @@ func initDevices() {
 	}
 }
 
-func main() {
-	setupLog(false)
-	if err := config.Load("./config.yml"); err != nil {
-		log.Printf("[ERROR] configuration: %v", err)
-		return
-	}
-	if config.C.Debug {
-		setupLog(true)
-	}
-	initDevices()
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() { // catch signal and invoke graceful termination
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-		s := <-sigChan
-		fmt.Print("\r")
-		log.Printf("[WARN] %v signal received", s)
-		cancel()
-	}()
-	fmt.Printf("miio2mqtt %s\n", version)
-	if err := run(ctx); err != nil {
-		log.Printf("[ERROR] %v", err)
-		time.Sleep(1 * time.Second)
-		os.Exit(1)
-	}
-	log.Print("[DEBUG] miio2mqtt finished")
-}
-
-func run(ctx context.Context) error {
-	wg := sync.WaitGroup{}
-	defer wg.Wait()
-
-	listener, err := net.StartListener(ctx, &wg)
-	if err != nil {
-		return err
-	}
-	defer listener.Stop()
-	listener.Purge()
-
-	messages := make(chan mqtt.Message, 100)
-	go func() {
-		client := mqtt.NewClient()
-		for {
-			select {
-			case <-ctx.Done():
-				log.Print("[DEBUG] stop processing mqtt messages")
-				return
-			case msg := <-messages:
-				if err := mqtt.Publish(client, msg); err != nil {
-					log.Printf("[WARN] unable to publish to MQTT broker: %v", err)
-				}
-			}
-		}
-	}()
-
-	next := nextTime(time.Now())
-	if next.Sub(time.Now()) < config.C.PollInterval*2/3 {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(next.Sub(time.Now())):
-		}
-	}
-
+func processMessages(ctx context.Context, client *mqtt.Client, messages <-chan mqtt.Message) {
 	for {
-		listener.Purge()
-		now := time.Now()
-		devices.SetStage(miio.Undiscovered, func(d *miio.Device) bool {
-			if !miio.DeviceFound(d) {
-				return false
-			}
-			outdated := now.After(d.UpdatedAt.Add(config.C.PollInterval * 3))
-			if outdated {
-				log.Printf("[INFO] outdated %s (updated %v ago)", d.Name, now.Sub(d.UpdatedAt))
-			}
-			return outdated
-		})
-		devices.SetStage(miio.Valid, miio.DeviceUpdated)
-		err = net.QueryDevices(ctx, listener, devices, messages)
-		if err != nil {
-			log.Printf("[DEBUG] unable to update all devices: %v", err)
-			// return err
-		} else {
-			log.Print("[DEBUG] all devices were updated successfully")
-		}
-		listener.Purge()
-		next := nextTime(time.Now())
 		select {
 		case <-ctx.Done():
-			return nil
-		case <-time.After(next.Sub(time.Now())):
+			log.Print("[DEBUG] stop processing mqtt messages")
+			return
+		case msg := <-messages:
+			if err := client.Publish(msg); err != nil {
+				log.Printf("[WARN] unable to publish to MQTT broker: %v", err)
+			}
 		}
 	}
 }

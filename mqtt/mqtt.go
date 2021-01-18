@@ -14,7 +14,11 @@ type Message struct {
 	Payload string
 }
 
-func NewClient() mqtt.Client {
+type Client struct {
+	mqtt mqtt.Client
+}
+
+func NewClient() *Client {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(config.C.Mqtt.BrokerURL)
 	opts.SetClientID(fmt.Sprintf("miio2mqtt-%x", time.Now().UnixNano()%0x1000000))
@@ -27,19 +31,15 @@ func NewClient() mqtt.Client {
 	// opts.SetOnConnectHandler(w.getConnectHandler())
 	opts.SetConnectionLostHandler(connectionLostHandler)
 
-	return mqtt.NewClient(opts)
+	return &Client{mqtt.NewClient(opts)}
 }
 
-func connectionLostHandler(client mqtt.Client, err error) {
-	log.Printf("[WARN] disconnected from %v: %v", config.C.Mqtt.BrokerURL, err)
-}
-
-func Connect(client mqtt.Client) error {
-	if client.IsConnected() {
+func (c *Client) Connect() error {
+	if c.mqtt.IsConnected() {
 		return nil
 	}
 	log.Printf("[DEBUG] connecting to %v...", config.C.Mqtt.BrokerURL)
-	token := client.Connect()
+	token := c.mqtt.Connect()
 	if token.Wait() && token.Error() != nil {
 		err := token.Error()
 		return err
@@ -48,13 +48,22 @@ func Connect(client mqtt.Client) error {
 	return nil
 }
 
-func Publish(client mqtt.Client, message Message) error {
-	if err := Connect(client); err != nil {
+func (c *Client) Disconnect() {
+	c.mqtt.Disconnect(uint(config.C.PushTimeout / time.Millisecond))
+	log.Printf("[DEBUG] disconnected from %v", config.C.Mqtt.BrokerURL)
+}
+
+func (c *Client) Publish(message Message) error {
+	if err := c.Connect(); err != nil {
 		return err
 	}
-	if token := client.Publish(message.Topic, 0, true, message.Payload); token.Wait() && token.Error() != nil {
+	if token := c.mqtt.Publish(message.Topic, 0, true, message.Payload); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
 	log.Printf("[INFO] MQTT publish %s: %s", message.Topic, message.Payload)
 	return nil
+}
+
+func connectionLostHandler(client mqtt.Client, err error) {
+	log.Printf("[WARN] disconnected from %v: %v", config.C.Mqtt.BrokerURL, err)
 }
