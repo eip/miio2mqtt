@@ -58,12 +58,6 @@ func run(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	listener, err := net.StartListener(ctx, &wg)
-	if err != nil {
-		return err
-	}
-	defer listener.Stop()
-
 	client := mqtt.NewClient()
 	defer client.Disconnect()
 	messages := make(chan mqtt.Message, 100)
@@ -88,10 +82,16 @@ func run(ctx context.Context) error {
 			return outdated
 		})
 		devices.SetStage(miio.Valid, miio.DeviceUpdated)
+		listener, err := net.StartListener(ctx, &wg)
+		if err != nil {
+			log.Printf("[WARN] unable to listen UDP packets: %v", err)
+			continue
+		}
 		listener.Purge()
 		err = net.QueryDevices(ctx, listener, devices, messages)
+		listener.Stop()
 		if err != nil {
-			log.Printf("[INFO] unable to update all devices: %v", err)
+			log.Printf("[WARN] unable to update all devices: %v", err)
 			// return err
 		} else {
 			log.Print("[DEBUG] all devices were updated successfully")
