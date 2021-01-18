@@ -26,10 +26,7 @@ func QueryDevices(ctx context.Context, listener *UDPListener, devices miio.Devic
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go func() {
-		sendPackets(ctx, listener.Connection, devices)
-		wg.Done()
-	}()
+	go func() { defer wg.Done(); sendPackets(ctx, listener.Connection, devices) }()
 
 	log.Print("[DEBUG] start updating devices")
 	var pkt UDPPacket

@@ -11,10 +11,13 @@ import (
 )
 
 const udpNetwork = "udp4"
+const errNetClosingString = "use of closed network connection" // defined in internal/poll package
 
 type UDPListener struct {
 	Connection *net.UDPConn
 	Packets    chan UDPPacket
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 type UDPPacket struct {
@@ -35,22 +38,23 @@ func StartListener(ctx context.Context, wg *sync.WaitGroup) (*UDPListener, error
 	}
 	chanLength := 4 * (len(config.C.Devices) + 1)
 	listener.Packets = make(chan UDPPacket, chanLength)
+	listener.ctx, listener.cancel = context.WithCancel(ctx)
+	// defer listener.cancel()
 	wg.Add(1)
-	go func() {
-		listenUDPPackets(ctx, listener)
-		wg.Done()
-	}()
+	go func() { defer wg.Done(); listenUDPPackets(listener) }()
 	return listener, nil
 }
 
 func (l *UDPListener) Stop() {
+	l.cancel()
 	if err := l.Connection.Close(); err != nil {
 		log.Printf("[ERROR] %v", err)
 	}
-	// log.Print("[DEBUG] UDP connection closed")
+	l.purge()
+	l.Packets = nil
 }
 
-func (l *UDPListener) Purge() {
+func (l *UDPListener) purge() {
 	count := 0
 loop:
 	for {
@@ -66,26 +70,27 @@ loop:
 	}
 }
 
-func listenUDPPackets(ctx context.Context, l *UDPListener) {
+func listenUDPPackets(l *UDPListener) {
 	log.Printf("[DEBUG] listening %v for UDP packets...", l.Connection.LocalAddr())
 	// defer close(udpPackets)
 	buffer := make([]byte, 1024)
 	for {
 		n, addr, err := l.Connection.ReadFromUDP(buffer)
 		if err != nil {
-			if nerr, ok := err.(*net.OpError); ok && nerr.Err.Error() == "use of closed network connection" {
-				log.Print("[DEBUG] network connection closed")
+			if nerr, ok := err.(*net.OpError); ok && nerr.Err.Error() == errNetClosingString {
+				log.Print("[DEBUG] stop listening for UDP packets")
 				return
 			}
 			log.Printf("[WARN] %v", err)
-			if ctx.Err() != nil {
+			if l.ctx.Err() != nil { // ctx was done
+				log.Print("[DEBUG] stop listening for UDP packets")
 				return
 			}
 			continue
 		}
 		pktTime := time.Now()
 		select {
-		case <-ctx.Done():
+		case <-l.ctx.Done():
 			log.Print("[DEBUG] stop listening for UDP packets")
 			l.Stop()
 			return

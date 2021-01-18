@@ -61,7 +61,8 @@ func run(ctx context.Context) error {
 	client := mqtt.NewClient()
 	defer client.Disconnect()
 	messages := make(chan mqtt.Message, 100)
-	go processMessages(ctx, client, messages)
+	wg.Add(1)
+	go func() { defer wg.Done(); processMessages(ctx, client, messages) }()
 
 	for {
 		next := nextTime(time.Now())
@@ -84,10 +85,9 @@ func run(ctx context.Context) error {
 		devices.SetStage(miio.Valid, miio.DeviceUpdated)
 		listener, err := net.StartListener(ctx, &wg)
 		if err != nil {
-			log.Printf("[WARN] unable to listen UDP packets: %v", err)
+			log.Printf("[WARN] unable to listen for UDP packets: %v", err)
 			continue
 		}
-		listener.Purge()
 		err = net.QueryDevices(ctx, listener, devices, messages)
 		listener.Stop()
 		if err != nil {

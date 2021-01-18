@@ -23,14 +23,8 @@ func NewClient() *Client {
 	opts.AddBroker(config.C.Mqtt.BrokerURL)
 	opts.SetClientID(fmt.Sprintf("miio2mqtt-%x", time.Now().UnixNano()%0x1000000))
 	opts.SetConnectTimeout(config.C.PushTimeout)
-	// opts.SetKeepAlive(60 * time.Second)
 	opts.SetAutoReconnect(false)
-	// opts.SetMaxReconnectInterval(5 * time.Second)
-
-	// opts.SetDefaultPublishHandler(w.getMessageHandler())
-	// opts.SetOnConnectHandler(w.getConnectHandler())
 	opts.SetConnectionLostHandler(connectionLostHandler)
-
 	return &Client{mqtt.NewClient(opts)}
 }
 
@@ -60,7 +54,7 @@ func (c *Client) Publish(message Message) error {
 	if token := c.mqtt.Publish(message.Topic, 0, true, message.Payload); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
-	log.Printf("[INFO] MQTT publish %s: %s", message.Topic, message.Payload)
+	log.Printf("[DEBUG] publish to %s: %s", message.Topic, message.Payload)
 	return nil
 }
 
