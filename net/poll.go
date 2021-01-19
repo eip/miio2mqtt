@@ -13,8 +13,8 @@ import (
 	log "github.com/go-pkgz/lgr"
 )
 
-// QueryDevices queries devices and updates devices info
-func QueryDevices(ctx context.Context, listener *UDPListener, devices miio.Devices, messages chan<- mqtt.Message) error {
+// PollDevices queries devices and updates devices info
+func PollDevices(ctx context.Context, listener *UDPListener, devices miio.Devices, messages chan<- mqtt.Message) error {
 	left := devices.Count(miio.DeviceNeedUpdate)
 	if left == 0 {
 		log.Print("[INFO] no device to update")

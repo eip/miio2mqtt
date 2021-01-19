@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sync/atomic"
 	"time"
+
+	log "github.com/go-pkgz/lgr"
 )
 
 var reID = regexp.MustCompile(`("id":\s?)#+`)
@@ -50,9 +52,8 @@ type Device struct {
 	Token      [16]byte
 	Properties string
 	UpdatedAt  time.Time
-	PushedAt   time.Time
 	TimeShift  time.Duration
-	RequestID  uint32
+	requestID  uint32
 	stage      int32
 	// complete  chan struct{}
 }
@@ -77,8 +78,8 @@ func (d *Device) Request(data []byte) (*Packet, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	d.RequestID++
-	pkt := NewPacket(d.ID, deviceTime, reID.ReplaceAll(data, []byte(fmt.Sprintf("${1}%d", d.RequestID))))
+	d.requestID++
+	pkt := NewPacket(d.ID, deviceTime, reID.ReplaceAll(data, []byte(fmt.Sprintf("${1}%d", d.requestID))))
 	// pkte := *pkt
 	raw, err := pkt.Encode(d.Token[:])
 	if err != nil {
@@ -132,4 +133,18 @@ func AnyDevice(_ *Device) bool {
 
 func DeviceNeedUpdate(d *Device) bool {
 	return d.GetStage() < Updated
+}
+
+func DeviceOutdated(timeout time.Duration) CheckDevice {
+	return func(d *Device) bool {
+		if !DeviceFound(d) {
+			return false
+		}
+		notUpdatedIn := time.Now().Sub(d.UpdatedAt)
+		if notUpdatedIn > timeout {
+			log.Printf("[INFO] outdated %s (updated %v ago)", d.Name, notUpdatedIn)
+			return true
+		}
+		return false
+	}
 }

@@ -71,24 +71,14 @@ func run(ctx context.Context) error {
 			return nil
 		case <-time.After(next.Sub(time.Now())):
 		}
-		now := time.Now()
-		devices.SetStage(miio.Undiscovered, func(d *miio.Device) bool {
-			if !miio.DeviceFound(d) {
-				return false
-			}
-			outdated := now.After(d.UpdatedAt.Add(config.C.PollInterval * 2))
-			if outdated {
-				log.Printf("[INFO] outdated %s (updated %v ago)", d.Name, now.Sub(d.UpdatedAt))
-			}
-			return outdated
-		})
+		devices.SetStage(miio.Valid, miio.DeviceOutdated(2*config.C.PollInterval))
 		devices.SetStage(miio.Valid, miio.DeviceUpdated)
 		listener, err := net.StartListener(ctx, &wg)
 		if err != nil {
 			log.Printf("[WARN] unable to listen for UDP packets: %v", err)
 			continue
 		}
-		err = net.QueryDevices(ctx, listener, devices, messages)
+		err = net.PollDevices(ctx, listener, devices, messages)
 		listener.Stop()
 		if err != nil {
 			log.Printf("[WARN] unable to update all devices: %v", err)
