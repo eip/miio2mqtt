@@ -31,7 +31,9 @@ func Test_New(t *testing.T) {
 						Params: defaultGetPropParams,
 					},
 				},
-				Devices: map[string]miio.DeviceCfg{},
+				Devices:    map[string]miio.DeviceCfg{},
+				Properties: map[interface{}]interface{}{"off": 0, "on": 1},
+				Debug:      false,
 			},
 		},
 	}
@@ -76,7 +78,10 @@ Devices:
     Address: 192.168.1.200
     ID: 0x01234567
     Token: 0102030405060708090a0b0c0d0e0f10
-    Topic: home/room/dummysensor`),
+    Topic: home/room/dummysensor
+Properties:
+    true: 1
+    false: 0`),
 			want: &Config{
 				PollInterval:  10 * time.Second,
 				PollAheadTime: 50 * time.Millisecond,
@@ -107,6 +112,7 @@ Devices:
 						Token:   "0102030405060708090a0b0c0d0e0f10",
 					},
 				},
+				Properties: map[interface{}]interface{}{false: 0, true: 1, "off": 0, "on": 1},
 			},
 		},
 		{

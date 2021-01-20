@@ -67,6 +67,7 @@ func New() *Config {
 			"off": 0,
 			"on":  1,
 		},
+		Debug: false,
 	}
 }
 
