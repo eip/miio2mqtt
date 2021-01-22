@@ -47,14 +47,16 @@ const (
 // Device represents a miIO all device properties
 type Device struct {
 	DeviceCfg
-	Name       string
-	Model      string
-	Token      [16]byte
-	Properties string
-	UpdatedAt  time.Time
-	TimeShift  time.Duration
-	requestID  uint32
-	stage      int32
+	Name             string
+	Model            string
+	Token            [16]byte
+	Properties       string
+	TimeShift        time.Duration
+	updatedAt        int64
+	stateChangedAt   int64
+	statePublishedAt int64
+	requestID        uint32
+	stage            int32
 	// complete  chan struct{}
 }
 
@@ -102,6 +104,31 @@ func (d *Device) SetStage(stage DeviceStage) {
 	atomic.StoreInt32(&d.stage, int32(stage))
 }
 
+func (d *Device) GetUpdatedTime() time.Time {
+	ts := atomic.LoadInt64(&d.updatedAt)
+	return time.Unix(0, ts)
+}
+
+func (d *Device) SetUpdatedNow() {
+	ts := time.Now().UnixNano()
+	atomic.StoreInt64(&d.updatedAt, ts)
+}
+
+func (d *Device) UpdatedIn() time.Duration {
+	ts := atomic.LoadInt64(&d.updatedAt)
+	return time.Duration(time.Now().UnixNano() - ts)
+}
+
+func (d *Device) SetStateChangedNow() {
+	ts := time.Now().UnixNano()
+	atomic.StoreInt64(&d.stateChangedAt, ts)
+}
+
+func (d *Device) SetStatePublishedNow() {
+	ts := time.Now().UnixNano()
+	atomic.StoreInt64(&d.statePublishedAt, ts)
+}
+
 func (dm Devices) Count(valid CheckDevice) int {
 	result := 0
 	for _, d := range dm {
@@ -145,9 +172,9 @@ func DeviceOutdated(timeout time.Duration) CheckDevice {
 		if !DeviceFound(d) {
 			return false
 		}
-		notUpdatedIn := time.Now().Sub(d.UpdatedAt)
-		if notUpdatedIn > timeout {
-			log.Printf("[INFO] outdated %s (updated %v ago)", d.Name, notUpdatedIn)
+		updatedIn := d.UpdatedIn()
+		if updatedIn > timeout {
+			log.Printf("[INFO] outdated %s (updated %v ago)", d.Name, updatedIn)
 			return true
 		}
 		return false

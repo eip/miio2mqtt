@@ -13,20 +13,10 @@ type T interface {
 	Fatalf(format string, args ...interface{})
 }
 
-const timeAccuracy = time.Millisecond
-
 func AssertEqual(t T, got, want interface{}) {
 	t.Helper()
-	switch got := got.(type) {
-	case time.Time:
-		diff := got.Sub(want.(time.Time))
-		if diff >= -timeAccuracy && diff <= timeAccuracy {
-			return
-		}
-	default:
-		if reflect.DeepEqual(got, want) {
-			return
-		}
+	if reflect.DeepEqual(got, want) {
+		return
 	}
 	t.Error(formatError(formatValue(got), formatValue(want)))
 }
@@ -69,6 +59,22 @@ func IsPrintableASCII(b []byte) bool {
 		}
 	}
 	return true
+}
+
+func TimeDiff(t1, t2 time.Time) time.Duration {
+	diff := t1.Sub(t2)
+	if diff < 0 {
+		diff = -diff
+	}
+	return time.Duration(diff)
+}
+
+func TimeStampDiff(t1, t2 int64) time.Duration {
+	diff := t1 - t2
+	if diff < 0 {
+		diff = -diff
+	}
+	return time.Duration(diff)
 }
 
 func formatValue(value interface{}) string {

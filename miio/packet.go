@@ -179,6 +179,10 @@ func (p *Packet) Str() string {
 	return fmt.Sprintf(format, p.DeviceID, ts, p.Data)
 }
 
+func (p *Packet) TimeStamp() int64 {
+	return int64(p.Stamp) * int64(time.Second)
+}
+
 func (p *Packet) validateChecksum(token []byte) (bool, error) {
 	if len(p.Data) == 0 {
 		b := byte(0xff)

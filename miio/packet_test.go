@@ -488,7 +488,12 @@ func TestPacket_decrypt(t *testing.T) {
 			token:  h.FromHex("00112233445566778899aabbccddeeff"),
 			err:    errInvalidDataLength,
 		},
-
+		{
+			name:   "Invalid Token",
+			packet: packetFromHex("21310040000000000011223300061e39b0cbb8837ed9a65a70165f2b7b4102722b487e7eed802b7df35c224caab8d216e43262c38b9cc073782c148668387d9e"),
+			token:  h.FromHex("00112233445566778899aabbccddee"),
+			err:    errInvalidTokenLength,
+		},
 		{
 			name:   "Real Packet 1",
 			packet: packetFromHex("2131009000000000047bd1b5002feede54a30263b7b2015db6bdc3e7d5bf6853b952275b1e1fd9ed283c5ad34120d6982ccee490f5774502ee2833ecf7c8c178c01cb9250ee22edc72296cb393a9815dcb4c69e968271a25004626ead4c7abdd0332ddbccc48749ff1ddfe765439a06f6084ebdcca2ae9caeb2e755daaa5f3161cee3147f75a0f6ba4a127f89eb75eaa"),

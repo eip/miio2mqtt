@@ -238,10 +238,11 @@ func processReply(pkt UDPPacket, devices miio.Devices, messages chan<- mqtt.Mess
 		if stateChanged {
 			d.Properties = string(props)
 		}
-		d.UpdatedAt = time.Now()
+		d.SetUpdatedNow()
 		d.SetStage(miio.Updated)
 		if stateChanged {
 			log.Printf("[INFO] updated %s: %s", d.Name, d.Properties)
+			d.SetStateChangedNow()
 			messages <- mqtt.Message{Topic: d.Topic, Payload: d.Properties}
 		} else {
 			log.Printf("[INFO] %s state unchanged", d.Name)
