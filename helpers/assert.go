@@ -1,10 +1,9 @@
 package helpers
 
 import (
-	"encoding/hex"
 	"fmt"
 	"reflect"
-	"time"
+	"regexp"
 )
 
 type T interface {
@@ -15,7 +14,7 @@ type T interface {
 
 func AssertEqual(t T, got, want interface{}) {
 	t.Helper()
-	if reflect.DeepEqual(got, want) {
+	if matchString(got, want) || reflect.DeepEqual(got, want) {
 		return
 	}
 	t.Error(formatError(formatValue(got), formatValue(want)))
@@ -39,42 +38,17 @@ func AssertError(t T, got, want error) {
 	}
 }
 
-func FromHex(s string) []byte {
-	bytes, err := hex.DecodeString(s)
-	if err != nil {
-		return nil
-	}
-	return bytes
-}
-
-func IsPrintableASCII(b []byte) bool {
-	if len(b) < 1 {
+func matchString(got, want interface{}) bool {
+	switch re := want.(type) {
+	case regexp.Regexp:
+		got := fmt.Sprint(got)
+		return (len(re.String()) == 0 && len(got) == 0) || (len(re.String()) > 0 && re.MatchString(got))
+	case *regexp.Regexp:
+		got := fmt.Sprint(got)
+		return ((re == nil || len(re.String()) == 0) && len(got) == 0) || (re != nil && len(re.String()) > 0 && re.MatchString(got))
+	default:
 		return false
 	}
-	const min byte = 0x20
-	const max byte = 0x7f
-	for i := 0; i < len(b); i++ {
-		if b[i] < min || b[i] > max {
-			return false
-		}
-	}
-	return true
-}
-
-func TimeDiff(t1, t2 time.Time) time.Duration {
-	diff := t1.Sub(t2)
-	if diff < 0 {
-		diff = -diff
-	}
-	return time.Duration(diff)
-}
-
-func TimeStampDiff(t1, t2 int64) time.Duration {
-	diff := t1 - t2
-	if diff < 0 {
-		diff = -diff
-	}
-	return time.Duration(diff)
 }
 
 func formatValue(value interface{}) string {
