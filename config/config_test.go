@@ -22,18 +22,10 @@ func Test_New(t *testing.T) {
 				PollTimeout:   defaultPollTimeout,
 				PushTimeout:   defaultPushTimeout,
 				MiioPort:      defaultMiioPort,
-				Models: miio.Models{
-					"*": miio.Model{
-						Methods: miio.ModelMethods{
-							MiioInfo: defaultMiioInfoRequest,
-							GetProp:  defaultGetPropRequest,
-						},
-						Params: defaultGetPropParams,
-					},
-				},
-				Devices:    map[string]miio.DeviceCfg{},
-				Properties: map[interface{}]interface{}{"off": 0, "on": 1},
-				Debug:      false,
+				Models:        miio.Models{"*": miio.DefaultModel()},
+				Devices:       map[string]miio.DeviceCfg{},
+				Properties:    map[interface{}]interface{}{"off": 0, "on": 1},
+				Debug:         false,
 			},
 		},
 	}
@@ -89,13 +81,7 @@ Properties:
 				PushTimeout:   4 * time.Second,
 				MiioPort:      12345,
 				Models: miio.Models{
-					"*": miio.Model{
-						Methods: miio.ModelMethods{
-							MiioInfo: defaultMiioInfoRequest,
-							GetProp:  defaultGetPropRequest,
-						},
-						Params: defaultGetPropParams,
-					},
+					"*": miio.DefaultModel(),
 					"mi.dummy.v1": miio.Model{
 						Methods: miio.ModelMethods{
 							MiioInfo: `{"dummy":"mi.dummy.v1","method":"miIO.info","params":[],"id":#}`,
