@@ -159,6 +159,11 @@ func Test_Decode(t *testing.T) {
 			err:   errInvalidDataLength,
 		},
 		{
+			name: "Short Packet",
+			data: h.FromHex("21310033000000000011223300061e39"),
+			err:  errInvalidDataLength,
+		},
+		{
 			name:  "Real Packet 1",
 			data:  h.FromHex("2131005000000000047bd1b55f53ee9bf0a2b109a80c902f0b55e5250e58f2cc95b21c4012d699586153e51f42d68c2ccdbb07b14326761acbe820ce8786ff4da71ff844841f7aee0c2b10c844b45245"),
 			token: h.FromHex("9c3b2d1da5beceee2808a3d3653b485d"),
@@ -182,11 +187,11 @@ func Test_Decode(t *testing.T) {
 
 func TestPacket_encode(t *testing.T) {
 	tests := []struct {
-		name   string
-		packet *Packet
-		token  []byte
-		want   []byte
-		err    error
+		name     string
+		packet   *Packet
+		checksum []byte
+		want     []byte
+		err      error
 	}{
 		{
 			name:   "Hello Packet",
@@ -194,26 +199,26 @@ func TestPacket_encode(t *testing.T) {
 			want:   h.FromHex("21310020ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 		},
 		{
-			name:   "Sample Packet (no token)",
+			name:   "Sample Packet (no checksum)",
 			packet: NewPacket(0x00112233, sampleTime, h.FromHex("31323334353637383940414243444546474849")),
 			want:   h.FromHex("21310033000000000011223300061e390000000000000000000000000000000031323334353637383940414243444546474849"),
 		},
 		{
-			name:   "Sample Packet",
-			packet: NewPacket(0x00112233, sampleTime, h.FromHex("31323334353637383940414243444546474849")),
-			token:  h.FromHex("00112233445566778899aabbccddeeff"),
-			want:   h.FromHex("21310033000000000011223300061e3900112233445566778899aabbccddeeff31323334353637383940414243444546474849"),
+			name:     "Sample Packet",
+			packet:   NewPacket(0x00112233, sampleTime, h.FromHex("31323334353637383940414243444546474849")),
+			checksum: h.FromHex("00112233445566778899aabbccddeeff"),
+			want:     h.FromHex("21310033000000000011223300061e3900112233445566778899aabbccddeeff31323334353637383940414243444546474849"),
 		},
 		{
-			name:   "Sample Packet (invalid token)",
-			packet: NewPacket(0x00112233, sampleTime, h.FromHex("31323334353637383940414243444546474849")),
-			token:  h.FromHex("0011223344556677"),
-			err:    errInvalidTokenLength,
+			name:     "Sample Packet (invalid checksum)",
+			packet:   NewPacket(0x00112233, sampleTime, h.FromHex("31323334353637383940414243444546474849")),
+			checksum: h.FromHex("0011223344556677"),
+			err:      errInvalidChecksumLength,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.packet.encode(tt.token)
+			got, err := tt.packet.encode(tt.checksum)
 			h.AssertError(t, err, tt.err)
 			h.AssertEqual(t, got, tt.want)
 		})
@@ -792,6 +797,12 @@ func Test_pkcs7strip(t *testing.T) {
 			data:      []byte{},
 			blockSize: 16,
 			err:       errInvalidDataLength,
+		},
+		{
+			name:      "invalid padding",
+			data:      []byte{1, 2, 3, 4, 5, 3, 2, 3},
+			blockSize: 8,
+			err:       errInvalidPadding,
 		},
 		{
 			name:      "1 byte padding",

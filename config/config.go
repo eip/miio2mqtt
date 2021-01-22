@@ -13,16 +13,12 @@ import (
 )
 
 const (
-	defaultPollInterval    = 5 * time.Second
-	defaultPollAheadTime   = 1 * time.Millisecond
-	defaultPollTimeout     = 1 * time.Second
-	defaultPushTimeout     = 1 * time.Second
-	defaultMiioPort        = 54321
-	defaultMiioInfoRequest = `{"method":"miIO.info","params":[],"id":#}`
-	defaultGetPropRequest  = `{"method":"get_prop","params":#,"id":#}`
+	defaultPollInterval  = 5 * time.Second
+	defaultPollAheadTime = 1 * time.Millisecond
+	defaultPollTimeout   = 1 * time.Second
+	defaultPushTimeout   = 1 * time.Second
+	defaultMiioPort      = 54321
 )
-
-var defaultGetPropParams = []string{"all"}
 
 // Config defines application options
 type Config struct {
@@ -53,16 +49,8 @@ func New() *Config {
 		PushTimeout:   defaultPushTimeout,
 		Mqtt:          MqttOptions{},
 		MiioPort:      defaultMiioPort,
-		Models: miio.Models{
-			"*": miio.Model{
-				Methods: miio.ModelMethods{
-					MiioInfo: defaultMiioInfoRequest,
-					GetProp:  defaultGetPropRequest,
-				},
-				Params: defaultGetPropParams,
-			},
-		},
-		Devices: map[string]miio.DeviceCfg{},
+		Models:        miio.Models{"*": miio.DefaultModel()},
+		Devices:       map[string]miio.DeviceCfg{},
 		Properties: map[interface{}]interface{}{
 			"off": 0,
 			"on":  1,

@@ -78,10 +78,12 @@ func (d *Device) Request(data []byte) (*Packet, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	d.requestID++
-	pkt := NewPacket(d.ID, deviceTime, reID.ReplaceAll(data, []byte(fmt.Sprintf("${1}%d", d.requestID))))
-	// pkte := *pkt
-	raw, err := pkt.Encode(d.Token[:])
+	return deviceRequest(data, d.ID, atomic.AddUint32(&d.requestID, 1), deviceTime, d.Token[:])
+}
+
+func deviceRequest(data []byte, deviceID uint32, requestID uint32, deviceTime time.Time, token []byte) (*Packet, []byte, error) {
+	pkt := NewPacket(deviceID, deviceTime, reID.ReplaceAll(data, []byte(fmt.Sprintf("${1}%d", requestID))))
+	raw, err := pkt.Encode(token)
 	if err != nil {
 		return pkt, nil, err
 	}
@@ -94,6 +96,9 @@ func (d *Device) GetStage() DeviceStage {
 }
 
 func (d *Device) SetStage(stage DeviceStage) {
+	if stage < Undiscovered || stage > Updated {
+		stage = Undiscovered
+	}
 	atomic.StoreInt32(&d.stage, int32(stage))
 }
 
@@ -131,7 +136,7 @@ func AnyDevice(_ *Device) bool {
 	return true
 }
 
-func DeviceNeedUpdate(d *Device) bool {
+func DeviceNeedsUpdate(d *Device) bool {
 	return d.GetStage() < Updated
 }
 

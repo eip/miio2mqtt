@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"reflect"
+	"time"
 )
 
 type T interface {
@@ -12,10 +13,20 @@ type T interface {
 	Fatalf(format string, args ...interface{})
 }
 
+const timeAccuracy = time.Millisecond
+
 func AssertEqual(t T, got, want interface{}) {
 	t.Helper()
-	if reflect.DeepEqual(got, want) {
-		return
+	switch got := got.(type) {
+	case time.Time:
+		diff := got.Sub(want.(time.Time))
+		if diff >= -timeAccuracy && diff <= timeAccuracy {
+			return
+		}
+	default:
+		if reflect.DeepEqual(got, want) {
+			return
+		}
 	}
 	t.Error(formatError(formatValue(got), formatValue(want)))
 }

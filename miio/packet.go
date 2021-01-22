@@ -28,6 +28,7 @@ var errInvalidMagicField = errors.New("invalid magic field")
 var errInvalidDataLength = errors.New("invalid data length")
 var errInvalidTokenLength = errors.New("invalid token length")
 var errInvalidChecksum = errors.New("invalid checksum")
+var errInvalidChecksumLength = errors.New("invalid checksum length")
 var errInvalidBlockSize = errors.New("invalid block size")
 var errInvalidPadding = errors.New("invalid padding")
 
@@ -86,9 +87,7 @@ func decode(data []byte) (*Packet, error) {
 	if len(data) < 32 {
 		return nil, errInvalidDataLength
 	}
-	p := Packet{
-		Data: make([]byte, len(data)-32),
-	}
+	p := Packet{}
 	buf := bytes.NewReader(data)
 	for _, v := range []interface{}{&p.Magic, &p.Length, &p.Unused, &p.DeviceID, &p.Stamp, p.Checksum[:]} {
 		if err := binary.Read(buf, binary.BigEndian, v); err != nil {
@@ -113,7 +112,7 @@ func (p *Packet) encode(checksum []byte) ([]byte, error) {
 	if len(checksum) == 0 {
 		checksum = p.Checksum[:]
 	} else if len(checksum) != 16 {
-		return nil, errInvalidTokenLength
+		return nil, errInvalidChecksumLength
 	}
 	for _, v := range []interface{}{p.Magic, p.Length, p.Unused, p.DeviceID, p.Stamp, checksum, p.Data} {
 		if dataLen(v) == 0 { // empty []byte

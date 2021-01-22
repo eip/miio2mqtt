@@ -19,6 +19,17 @@ type ModelMethods struct {
 	GetProp  string `yaml:"GetProp"`
 }
 
+const (
+	defaultMiioInfoRequest = `{"method":"miIO.info","params":[],"id":#}`
+	defaultGetPropRequest  = `{"method":"get_prop","params":#,"id":#}`
+)
+
+func DefaultModel() Model {
+	return Model{
+		Methods: ModelMethods{MiioInfo: defaultMiioInfoRequest, GetProp: defaultGetPropRequest},
+	}
+}
+
 type Models map[string]Model
 
 type ReplyType int32
@@ -50,11 +61,16 @@ func (mm Models) MiioInfo(model string) string {
 }
 
 func (mm Models) Params(model string) []string {
-	for _, name := range []string{model, "*"} {
-		if m, ok := mm[name]; ok {
-			if len(m.Params) > 0 {
-				return m.Params
+	if m, ok := mm[model]; ok {
+		params := []string{}
+		for _, p := range m.Params {
+			if len(p) < 1 {
+				continue
 			}
+			params = append(params, p)
+		}
+		if len(params) > 0 {
+			return params
 		}
 	}
 	log.Printf("[WARN] unable to find %s parameters list", model)

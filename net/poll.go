@@ -15,7 +15,7 @@ import (
 
 // PollDevices queries devices and updates devices info
 func PollDevices(ctx context.Context, listener *UDPListener, devices miio.Devices, messages chan<- mqtt.Message) error {
-	left := devices.Count(miio.DeviceNeedUpdate)
+	left := devices.Count(miio.DeviceNeedsUpdate)
 	if left == 0 {
 		log.Print("[INFO] no device to update")
 		return nil
