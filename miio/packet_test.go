@@ -8,8 +8,6 @@ import (
 	h "github.com/eip/miio2mqtt/helpers"
 )
 
-var sampleTime time.Time = time.Unix(111*3600+22*60+33, 0) // unix timestamp = 0x00061e39
-
 func Test_NewHelloPacket(t *testing.T) {
 	want := &Packet{
 		Magic:    0x2131,

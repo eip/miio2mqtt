@@ -1,6 +1,7 @@
 package miio
 
 import (
+	"regexp"
 	"testing"
 
 	h "github.com/eip/miio2mqtt/helpers"
@@ -15,17 +16,20 @@ func Test_DefaultModel(t *testing.T) {
 }
 
 func TestModels_MiioInfo(t *testing.T) {
+	logRe := regexp.MustCompile(`^\[WARN\]\s+unable to find`)
 	tests := []struct {
 		name   string
 		models Models
 		model  string
 		want   string
+		logRe  *regexp.Regexp
 	}{
 		{
 			name:   "Empty Models",
 			models: Models{},
 			model:  "dummy.test.v1",
 			want:   "",
+			logRe:  logRe,
 		},
 		{
 			name: "Nonexisting Model",
@@ -66,24 +70,29 @@ func TestModels_MiioInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			testLog.Reset()
 			got := tt.models.MiioInfo(tt.model)
 			h.AssertEqual(t, got, tt.want)
+			h.AssertEqual(t, testLog.Message, tt.logRe)
 		})
 	}
 }
 
 func TestModels_Params(t *testing.T) {
+	logRe := regexp.MustCompile(`^\[WARN\]\s+unable to find`)
 	tests := []struct {
 		name   string
 		models Models
 		model  string
 		want   []string
+		logRe  *regexp.Regexp
 	}{
 		{
 			name:   "Empty Models",
 			models: Models{},
 			model:  "dummy.test.v1",
 			want:   nil,
+			logRe:  logRe,
 		},
 		{
 			name: "Nonexisting Model",
@@ -93,6 +102,7 @@ func TestModels_Params(t *testing.T) {
 			},
 			model: "dummy.test.v2",
 			want:  nil,
+			logRe: logRe,
 		},
 		{
 			name: "Model with undefined Params",
@@ -102,6 +112,7 @@ func TestModels_Params(t *testing.T) {
 			},
 			model: "dummy.test.v1",
 			want:  nil,
+			logRe: logRe,
 		},
 		{
 			name: "Model with empty Params",
@@ -111,6 +122,7 @@ func TestModels_Params(t *testing.T) {
 			},
 			model: "dummy.test.v1",
 			want:  nil,
+			logRe: logRe,
 		},
 		{
 			name: "Model with empty strings in Params",
@@ -120,6 +132,7 @@ func TestModels_Params(t *testing.T) {
 			},
 			model: "dummy.test.v1",
 			want:  nil,
+			logRe: logRe,
 		},
 		{
 			name: "Model with defined Params",
@@ -142,24 +155,29 @@ func TestModels_Params(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			testLog.Reset()
 			got := tt.models.Params(tt.model)
 			h.AssertEqual(t, got, tt.want)
+			h.AssertEqual(t, testLog.Message, tt.logRe)
 		})
 	}
 }
 
 func TestModels_GetProp(t *testing.T) {
+	logRe := regexp.MustCompile(`^\[WARN\]\s+unable to find`)
 	tests := []struct {
 		name   string
 		models Models
 		model  string
 		want   string
+		logRe  *regexp.Regexp
 	}{
 		{
 			name:   "Empty Models",
 			models: Models{},
 			model:  "dummy.test.v1",
 			want:   "",
+			logRe:  logRe,
 		},
 		{
 			name: "Nonexisting Model",
@@ -169,6 +187,7 @@ func TestModels_GetProp(t *testing.T) {
 			},
 			model: "dummy.test.v2",
 			want:  "",
+			logRe: logRe,
 		},
 		{
 			name: "Model with undefined GetProp method",
@@ -178,6 +197,7 @@ func TestModels_GetProp(t *testing.T) {
 			},
 			model: "dummy.test.v1",
 			want:  "",
+			logRe: logRe,
 		},
 		{
 			name: "Model with undefined GetProp method and defined Params",
@@ -196,6 +216,7 @@ func TestModels_GetProp(t *testing.T) {
 			},
 			model: "dummy.test.v1",
 			want:  "",
+			logRe: logRe,
 		},
 		{
 			name: "Model with defined GetProp method",
@@ -205,6 +226,7 @@ func TestModels_GetProp(t *testing.T) {
 			},
 			model: "dummy.test.v1",
 			want:  "",
+			logRe: logRe,
 		},
 		{
 			name: "Model with defined GetProp method and Params",
@@ -222,41 +244,50 @@ func TestModels_GetProp(t *testing.T) {
 			},
 			model: "dummy.test.v1",
 			want:  "",
+			logRe: logRe,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			testLog.Reset()
 			got := tt.models.GetProp(tt.model)
 			h.AssertEqual(t, got, tt.want)
+			h.AssertEqual(t, testLog.Message, tt.logRe)
 		})
 	}
 }
 
 func Test_ParseReply(t *testing.T) {
+	logRe := regexp.MustCompile(`^\[WARN\]\s+unable to parse`)
 	tests := []struct {
-		name string
-		data string
-		want Reply
+		name  string
+		data  string
+		want  Reply
+		logRe *regexp.Regexp
 	}{
 		{
-			name: "Invalid JSON",
-			data: "foo",
-			want: Reply{Type: Unrecognized},
+			name:  "Invalid JSON",
+			data:  "foo",
+			want:  Reply{Type: Unrecognized},
+			logRe: logRe,
 		},
 		{
-			name: "Invalid MiioInfo reply 1",
-			data: `{"result":{"life":123456,"cfg_time":0},"id":1}`,
-			want: Reply{Type: Unrecognized},
+			name:  "Invalid MiioInfo reply 1",
+			data:  `{"result":{"life":123456,"cfg_time":0},"id":1}`,
+			want:  Reply{Type: Unrecognized},
+			logRe: logRe,
 		},
 		{
-			name: "Invalid MiioInfo reply 2",
-			data: `{"result":{"life":123456,"cfg_time":0,"model":123.45},"id":1}`,
-			want: Reply{Type: Unrecognized},
+			name:  "Invalid MiioInfo reply 2",
+			data:  `{"result":{"life":123456,"cfg_time":0,"model":123.45},"id":1}`,
+			want:  Reply{Type: Unrecognized},
+			logRe: logRe,
 		},
 		{
-			name: "Invalid MiioInfo reply 2",
-			data: `{"result":{"life":123456,"cfg_time":0,"model":""},"id":1}`,
-			want: Reply{Type: Unrecognized},
+			name:  "Invalid MiioInfo reply 2",
+			data:  `{"result":{"life":123456,"cfg_time":0,"model":""},"id":1}`,
+			want:  Reply{Type: Unrecognized},
+			logRe: logRe,
 		},
 		{
 			name: "MiioInfo reply",
@@ -264,19 +295,22 @@ func Test_ParseReply(t *testing.T) {
 			want: Reply{Type: MiioInfo, Model: "dummy.test.v1"},
 		},
 		{
-			name: "Invalid GetProp reply 1",
-			data: `{"foo":["foo","bar",123.45,true],"id":1}`,
-			want: Reply{Type: Unrecognized},
+			name:  "Invalid GetProp reply 1",
+			data:  `{"foo":["foo","bar",123.45,true],"id":1}`,
+			want:  Reply{Type: Unrecognized},
+			logRe: logRe,
 		},
 		{
-			name: "Invalid GetProp reply 2",
-			data: `{"result":123.45,"id":1}`,
-			want: Reply{Type: Unrecognized},
+			name:  "Invalid GetProp reply 2",
+			data:  `{"result":123.45,"id":1}`,
+			want:  Reply{Type: Unrecognized},
+			logRe: logRe,
 		},
 		{
-			name: "Invalid GetProp reply 3",
-			data: `{"result":[],"id":1}`,
-			want: Reply{Type: Unrecognized},
+			name:  "Invalid GetProp reply 3",
+			data:  `{"result":[],"id":1}`,
+			want:  Reply{Type: Unrecognized},
+			logRe: logRe,
 		},
 		{
 			name: "GetProp reply",
@@ -286,8 +320,10 @@ func Test_ParseReply(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			testLog.Reset()
 			got := ParseReply([]byte(tt.data))
 			h.AssertEqual(t, got, tt.want)
+			h.AssertEqual(t, testLog.Message, tt.logRe)
 		})
 	}
 }

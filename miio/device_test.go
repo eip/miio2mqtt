@@ -2,11 +2,15 @@ package miio
 
 import (
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
 	h "github.com/eip/miio2mqtt/helpers"
 )
+
+var sampleTime time.Time = time.Unix(111*3600+22*60+33, 0) // unix timestamp = 0x00061e39
+var testLog = h.InitTestLog()
 
 func TestDeviceStage_String(t *testing.T) {
 	tests := []struct {
@@ -434,25 +438,29 @@ func Test_DeviceNeedsUpdate(t *testing.T) {
 	}
 }
 func Test_DeviceOutdated(t *testing.T) {
+	logRe := regexp.MustCompile(`^\[INFO\]\s+outdated`)
 	tests := []struct {
 		name    string
 		device  Device
 		timeout time.Duration
 		want    bool
+		logRe   *regexp.Regexp
 	}{
 		{name: "Undiscovered", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Undiscovered)}, timeout: time.Minute, want: false},
 		{name: "Undiscovered timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Undiscovered)}, timeout: time.Minute, want: false},
 		{name: "Found", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Found)}, timeout: time.Minute, want: false},
-		{name: "Found timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Found)}, timeout: time.Minute, want: true},
+		{name: "Found timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Found)}, timeout: time.Minute, want: true, logRe: logRe},
 		{name: "Valid", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Valid)}, timeout: time.Minute, want: false},
-		{name: "Valid timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Valid)}, timeout: time.Minute, want: true},
+		{name: "Valid timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Valid)}, timeout: time.Minute, want: true, logRe: logRe},
 		{name: "Updated", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Updated)}, timeout: time.Minute, want: false},
-		{name: "Updated timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Updated)}, timeout: time.Minute, want: true},
+		{name: "Updated timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Updated)}, timeout: time.Minute, want: true, logRe: logRe},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			testLog.Reset()
 			got := DeviceOutdated(tt.timeout)(&tt.device)
 			h.AssertEqual(t, got, tt.want)
+			h.AssertEqual(t, testLog.Message, tt.logRe)
 		})
 	}
 }
