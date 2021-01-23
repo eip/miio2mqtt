@@ -38,8 +38,8 @@ func AssertError(t T, got, want error) {
 	}
 }
 
-func matchString(got, want interface{}) bool {
-	switch re := want.(type) {
+func matchString(got, re interface{}) bool {
+	switch re := re.(type) {
 	case regexp.Regexp:
 		got := fmt.Sprint(got)
 		return (len(re.String()) == 0 && len(got) == 0) || (len(re.String()) > 0 && re.MatchString(got))
@@ -64,6 +64,7 @@ func formatValue(value interface{}) string {
 		v = v.Elem()
 		k = v.Kind()
 	}
+	value = v.Interface()
 	switch k {
 	case reflect.Bool:
 		return fmt.Sprintf("%v", value)
@@ -91,7 +92,12 @@ func formatValue(value interface{}) string {
 	case reflect.String:
 		return fmt.Sprintf("%q", value)
 	case reflect.Struct:
-		return fmt.Sprintf("%+v", value)
+		switch value := value.(type) {
+		case regexp.Regexp:
+			return fmt.Sprintf("%q", &value)
+		default:
+			return fmt.Sprintf("%+v", value)
+		}
 	default:
 		fmt.Printf("##### need support for %s (%T)\n", k, value)
 		return fmt.Sprintf("%#v", value)
