@@ -82,7 +82,7 @@ func Test_deviceRequest(t *testing.T) {
 	}{
 		{
 			name:       "Sample Request",
-			data:       "123456789@ABCDEFGHI",
+			data:       "123456789@ABCDEFGHI", // cspell: disable-line
 			deviceID:   0x00112233,
 			requestID:  0,
 			deviceTime: sampleTime,
@@ -92,7 +92,7 @@ func Test_deviceRequest(t *testing.T) {
 		},
 		{
 			name:       "Invalid Token",
-			data:       "123456789@ABCDEFGHI",
+			data:       "123456789@ABCDEFGHI", // cspell: disable-line
 			deviceID:   0x00112233,
 			requestID:  0,
 			deviceTime: sampleTime,

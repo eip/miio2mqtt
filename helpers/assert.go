@@ -86,7 +86,7 @@ func formatValue(value interface{}) string {
 			}
 			return fmt.Sprintf("%x", value)
 		default:
-			fmt.Printf("##### need support for %s (%T)\n", k, value)
+			fmt.Printf("### helpers.formatValue(): need support for %s (%T)\n", k, value)
 			return fmt.Sprintf("%#v", value)
 		}
 	case reflect.String:
@@ -99,7 +99,7 @@ func formatValue(value interface{}) string {
 			return fmt.Sprintf("%+v", value)
 		}
 	default:
-		fmt.Printf("##### need support for %s (%T)\n", k, value)
+		fmt.Printf("### helpers.formatValue(): need support for %s (%T)\n", k, value)
 		return fmt.Sprintf("%#v", value)
 	}
 }
