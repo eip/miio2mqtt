@@ -49,27 +49,20 @@ func Test_GetLocalUDPAddr(t *testing.T) {
 	tests := []struct {
 		name string
 		port int
-		want string
+		want *regexp.Regexp
 		err  error
 	}{
 		{
 			name: "LAN Address",
 			port: 54321,
-			want: `\d+\.\d+\.\d+\.\d+:54321`,
+			want: regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]):54321$`),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := GetLocalUDPAddr(tt.port)
 			h.AssertError(t, err, tt.err)
-			matched, err := regexp.MatchString(tt.want, got.String())
-			if err != nil {
-				t.Errorf("\npattern error %#v", err)
-				return
-			}
-			if !matched {
-				t.Errorf("got %s, want %s", got, tt.want)
-			}
+			h.AssertEqual(t, got, tt.want)
 		})
 	}
 }
@@ -79,19 +72,19 @@ func Test_GetBroadcastUDPAddr(t *testing.T) {
 		name      string
 		localAddr *net.UDPAddr
 		port      int
-		want      string
+		want      *regexp.Regexp
 		err       error
 	}{
 		{
 			name:      "17.253.144.255:321",
 			localAddr: ParseUDPAddr("17.253.144.10", 321),
 			port:      123,
-			want:      `17\.253\.144\.255:123`,
+			want:      regexp.MustCompile(`^17\.253\.144\.255:123$`),
 		},
 		{
 			name: "LAN Broadcast Address",
 			port: 54321,
-			want: `\d+\.\d+\.\d+\.255:54321`,
+			want: regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}255:54321$`),
 		},
 	}
 	for _, tt := range tests {
@@ -99,16 +92,8 @@ func Test_GetBroadcastUDPAddr(t *testing.T) {
 			saved := tt.localAddr.String()
 			got, err := GetBroadcastUDPAddr(tt.localAddr, tt.port)
 			h.AssertError(t, err, tt.err)
-			matched, err := regexp.MatchString(tt.want, got.String()) // TODO h.AssertMatch()
-			if err != nil {
-				t.Fatalf("\npattern error %#v", err)
-			}
-			if !matched {
-				t.Errorf("got %s, want %s", got, tt.want)
-			}
-			if tt.localAddr.String() != saved {
-				t.Errorf("localAddr was %s, got %s", saved, tt.localAddr)
-			}
+			h.AssertEqual(t, got, tt.want)
+			h.AssertEqual(t, tt.localAddr.String(), saved)
 		})
 	}
 }
