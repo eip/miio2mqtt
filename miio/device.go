@@ -129,6 +129,12 @@ func (d *Device) SetStatePublishedNow() {
 	atomic.StoreInt64(&d.statePublishedAt, ts)
 }
 
+func (d *Device) StateChangeUnpublished() bool {
+	cts := atomic.LoadInt64(&d.stateChangedAt)
+	pts := atomic.LoadInt64(&d.statePublishedAt)
+	return cts > pts
+}
+
 func (dm Devices) Count(valid CheckDevice) int {
 	result := 0
 	for _, d := range dm {

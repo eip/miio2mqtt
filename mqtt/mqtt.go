@@ -6,12 +6,12 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/eip/miio2mqtt/config"
+	"github.com/eip/miio2mqtt/miio"
 	log "github.com/go-pkgz/lgr"
 )
 
 type Message struct {
-	Topic   string
-	Payload string
+	Device *miio.Device
 }
 
 type Client struct {
@@ -51,10 +51,11 @@ func (c *Client) Publish(message Message) error {
 	if err := c.Connect(); err != nil {
 		return err
 	}
-	if token := c.mqtt.Publish(message.Topic, 0, true, message.Payload); token.Wait() && token.Error() != nil {
+	if token := c.mqtt.Publish(message.Device.Topic, 0, true, message.Device.Properties); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
-	log.Printf("[DEBUG] publish to %s: %s", message.Topic, message.Payload)
+	message.Device.SetStatePublishedNow()
+	log.Printf("[DEBUG] publish to %s: %s", message.Device.Topic, message.Device.Properties)
 	return nil
 }
 
