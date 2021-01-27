@@ -119,16 +119,8 @@ func (d *Device) UpdatedIn() time.Duration {
 }
 
 func (d *Device) SetStateChangedNow() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("Recovered in SetStateChangedNow %v", r)
-		}
-	}()
-
 	ts := time.Now().UnixNano()
-	log.Printf("***** SetStateChangedNow(%v): [%p.%v]", ts, d, &d.stateChangedAt)
 	atomic.StoreInt64(&d.stateChangedAt, ts)
-	log.Printf("***** OK SetStateChangedNow(%v)", ts)
 }
 
 func (d *Device) SetStatePublishedNow() {
