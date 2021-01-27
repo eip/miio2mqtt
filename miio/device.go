@@ -46,18 +46,17 @@ const (
 
 // Device represents a miIO all device properties
 type Device struct {
-	DeviceCfg
-	Name             string
-	Model            string
-	Token            [16]byte
-	Properties       string
-	TimeShift        time.Duration
 	updatedAt        int64
 	stateChangedAt   int64
 	statePublishedAt int64
 	requestID        uint32
 	stage            int32
-	// complete  chan struct{}
+	DeviceCfg
+	Name       string
+	Model      string
+	Token      [16]byte
+	Properties string
+	TimeShift  time.Duration
 }
 
 type Devices map[uint32]*Device
@@ -120,8 +119,16 @@ func (d *Device) UpdatedIn() time.Duration {
 }
 
 func (d *Device) SetStateChangedNow() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered in SetStateChangedNow %v", r)
+		}
+	}()
+
 	ts := time.Now().UnixNano()
+	log.Printf("***** SetStateChangedNow(%v): [%p.%v]", ts, d, &d.stateChangedAt)
 	atomic.StoreInt64(&d.stateChangedAt, ts)
+	log.Printf("***** OK SetStateChangedNow(%v)", ts)
 }
 
 func (d *Device) SetStatePublishedNow() {
