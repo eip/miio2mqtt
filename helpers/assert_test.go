@@ -153,7 +153,7 @@ func Test_AssertEqual(t *testing.T) {
 		{name: "Same values", argGot: int(237), argWant: int(237), helperCalls: 1, errorCalls: 0, want: ""},
 		{name: "Different values", argGot: int(237), argWant: int(0), helperCalls: 1, errorCalls: 1, want: "got 237, want 0"},
 		{name: "Matching string", argGot: string("Foo 237"), argWant: regexp.MustCompile("^Foo \\d+$"), helperCalls: 1, errorCalls: 0, want: ""},
-		{name: "Not matching string", argGot: string("Foo 237x"), argWant: regexp.MustCompile("^Foo \\d+$"), helperCalls: 1, errorCalls: 1, want: ""},
+		{name: "Not matching string", argGot: string("Foo 237x"), argWant: regexp.MustCompile("^Foo \\d+$"), helperCalls: 1, errorCalls: 1, want: "got \"Foo 237x\", want \"^Foo \\\\d+$\""},
 	}
 
 	for _, tt := range tests {

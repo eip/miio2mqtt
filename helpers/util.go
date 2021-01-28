@@ -11,18 +11,24 @@ type TestLog struct {
 	Message string
 }
 
-func (m *TestLog) Write(p []byte) (n int, err error) {
-	m.Message = string(p)
+func (l *TestLog) Write(p []byte) (n int, err error) {
+	l.Message = string(p)
 	return len(p), nil
 }
 
-func (m *TestLog) Reset() {
-	m.Message = ""
+func (l *TestLog) Reset() {
+	l.Message = ""
+}
+
+type nilLog struct{}
+
+func (l *nilLog) Write(p []byte) (n int, err error) {
+	return len(p), nil
 }
 
 func InitTestLog() *TestLog {
 	logger := &TestLog{}
-	log.Setup(log.Format(`[{{.Level}}] {{.Message}}`), log.Out(logger))
+	log.Setup(log.Format(`[{{.Level}}] {{.Message}}`), log.Out(logger), log.Err(&nilLog{}))
 	return logger
 }
 
