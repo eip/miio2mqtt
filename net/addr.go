@@ -18,29 +18,52 @@ func ParseUDPAddr(host string, port int) *net.UDPAddr {
 	return udpAddr
 }
 
-func GetLocalUDPAddr(port int) (*net.UDPAddr, error) {
+func GetUDPAddresses(port int) (*net.UDPAddr, *net.UDPAddr, error) {
+	localAddr, err := getLocalIPAddr()
+	if err != nil {
+		return nil, nil, err
+	}
+	localIPNet, err := getLocalIPNet(localAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+	bcastAddr, err := getBroadcastIPAddr(localIPNet)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &net.UDPAddr{IP: *localAddr, Port: 0, Zone: ""}, &net.UDPAddr{IP: *bcastAddr, Port: port, Zone: ""}, nil
+}
+
+func getLocalIPAddr() (*net.IP, error) {
 	conn, err := net.Dial(udpNetwork, probeAddress)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
-	addr := conn.LocalAddr().(*net.UDPAddr)
-	addr.Port = port
-	return addr, nil
+	addr := conn.LocalAddr().(*net.UDPAddr).IP
+	return &addr, nil
 }
 
-func GetBroadcastUDPAddr(localAddr *net.UDPAddr, port int) (*net.UDPAddr, error) {
-	if localAddr == nil || localAddr.IP == nil {
-		var err error
-		localAddr, err = GetLocalUDPAddr(port)
-		if err != nil {
-			return nil, err
+func getLocalIPNet(localAddr *net.IP) (*net.IPNet, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && ipNet.IP.To4() != nil && !ipNet.IP.IsLoopback() && ipNet.IP.String() == localAddr.String() {
+			return ipNet, nil
 		}
 	}
-	addr := &net.UDPAddr{IP: make(net.IP, net.IPv4len), Port: port, Zone: localAddr.Zone}
-	copy(addr.IP, localAddr.IP)
-	addr.IP[3] = 0xff
-	return addr, nil
+	return nil, fmt.Errorf("cannot find interface with IP address %s", localAddr)
+}
+
+func getBroadcastIPAddr(localIPNet *net.IPNet) (*net.IP, error) {
+	if ip, mask := localIPNet.IP.To4(), net.IP(localIPNet.Mask).To4(); ip != nil && mask != nil {
+		addr := make(net.IP, net.IPv4len)
+		binary.BigEndian.PutUint32(addr, binary.BigEndian.Uint32(ip)|^binary.BigEndian.Uint32(mask))
+		return &addr, nil
+	}
+	return nil, fmt.Errorf("invalid IPv4 address: %s", localIPNet)
 }
 
 func IPv4ToInt(ip net.IP) (uint32, error) {

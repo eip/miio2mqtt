@@ -14,10 +14,12 @@ const udpNetwork = "udp4"
 const errNetClosingString = "use of closed network connection" // defined in internal/poll package
 
 type UDPListener struct {
-	Connection *net.UDPConn
-	Packets    chan UDPPacket
-	ctx        context.Context
-	cancel     context.CancelFunc
+	LocalAddress     *net.UDPAddr
+	BroadcastAddress *net.UDPAddr
+	Connection       *net.UDPConn
+	Packets          chan UDPPacket
+	ctx              context.Context
+	cancel           context.CancelFunc
 }
 
 type UDPPacket struct {
@@ -27,12 +29,13 @@ type UDPPacket struct {
 }
 
 func StartListener(ctx context.Context, wg *sync.WaitGroup) (*UDPListener, error) {
-	laddr, err := GetLocalUDPAddr(0)
+	var err error
+	listener := &UDPListener{}
+	listener.LocalAddress, listener.BroadcastAddress, err = GetUDPAddresses(config.C.MiioPort)
 	if err != nil {
 		return nil, err
 	}
-	listener := &UDPListener{}
-	listener.Connection, err = net.ListenUDP(udpNetwork, laddr)
+	listener.Connection, err = net.ListenUDP(udpNetwork, listener.LocalAddress)
 	if err != nil {
 		return nil, err
 	}

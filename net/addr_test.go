@@ -45,55 +45,118 @@ func Test_ParseUDPAddr(t *testing.T) {
 	}
 }
 
-func Test_GetLocalUDPAddr(t *testing.T) {
+func Test_GetUDPAddresses(t *testing.T) {
+	tests := []struct {
+		name      string
+		port      int
+		wantLocal *regexp.Regexp
+		wantBC    *regexp.Regexp
+		err       error
+	}{
+		{
+			name:      "LAN Address",
+			port:      54321,
+			wantLocal: regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]):0$`),
+			wantBC:    regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]):54321$`),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotLocal, gotBC, err := GetUDPAddresses(tt.port)
+			h.AssertError(t, err, tt.err)
+			h.AssertEqual(t, gotLocal, tt.wantLocal)
+			h.AssertEqual(t, gotBC, tt.wantBC)
+		})
+	}
+}
+
+func Test_getLocalIPAddr(t *testing.T) {
 	tests := []struct {
 		name string
-		port int
 		want *regexp.Regexp
 		err  error
 	}{
 		{
 			name: "LAN Address",
-			port: 54321,
-			want: regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]):54321$`),
+			want: regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$`),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetLocalUDPAddr(tt.port)
+			got, err := getLocalIPAddr()
 			h.AssertError(t, err, tt.err)
 			h.AssertEqual(t, got, tt.want)
 		})
 	}
 }
 
-func Test_GetBroadcastUDPAddr(t *testing.T) {
+func Test_getLocalIPNet(t *testing.T) {
 	tests := []struct {
 		name      string
-		localAddr *net.UDPAddr
-		port      int
+		localAddr *net.IP
 		want      *regexp.Regexp
 		err       error
 	}{
 		{
-			name:      "17.253.144.255:321",
-			localAddr: ParseUDPAddr("17.253.144.10", 321),
-			port:      123,
-			want:      regexp.MustCompile(`^17\.253\.144\.255:123$`),
+			name:      "LAN Address",
+			localAddr: func() *net.IP { a, _ := getLocalIPAddr(); return a }(),
+			want:      regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])/(?:3[0-1]|[1-2][0-9]|[8-9])$`),
 		},
 		{
-			name: "LAN Broadcast Address",
-			port: 54321,
-			want: regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}255:54321$`),
+			name:      "Loopback Address",
+			localAddr: func() *net.IP { a := net.ParseIP("127.0.0.1"); return &a }(),
+			want:      regexp.MustCompile("<nil>"),
+			err:       errors.New("cannot find interface with IP address 127.0.0.1"),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			saved := tt.localAddr.String()
-			got, err := GetBroadcastUDPAddr(tt.localAddr, tt.port)
+			got, err := getLocalIPNet(tt.localAddr)
 			h.AssertError(t, err, tt.err)
 			h.AssertEqual(t, got, tt.want)
-			h.AssertEqual(t, tt.localAddr.String(), saved)
+		})
+	}
+}
+
+func Test_getBroadcastIPAddr(t *testing.T) {
+	tests := []struct {
+		name       string
+		localIPNet *net.IPNet
+		want       *regexp.Regexp
+		err        error
+	}{
+		{
+			name:       "LAN Address",
+			localIPNet: func() *net.IPNet { a, _ := getLocalIPAddr(); n, _ := getLocalIPNet(a); return n }(),
+			want:       regexp.MustCompile(`^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$`),
+		},
+		{
+			name:       "192.168.31.1/24",
+			localIPNet: &net.IPNet{IP: net.ParseIP("192.168.31.1"), Mask: net.CIDRMask(24, 32)},
+			want:       regexp.MustCompile("192\\.168\\.31\\.255"),
+		},
+		{
+			name:       "10.0.2.13/24",
+			localIPNet: &net.IPNet{IP: net.ParseIP("10.0.2.13"), Mask: net.CIDRMask(8, 32)},
+			want:       regexp.MustCompile("10\\.255\\.255\\.255"),
+		},
+		{
+			name:       "17.253.144.10/21",
+			localIPNet: &net.IPNet{IP: net.ParseIP("17.253.144.10"), Mask: net.CIDRMask(21, 32)},
+			want:       regexp.MustCompile("17\\.253\\.151\\.255"),
+		},
+		{
+			name:       "2001:db8:abcd:3f00::/64",
+			localIPNet: &net.IPNet{IP: net.ParseIP("2001:db8:abcd:3f00::"), Mask: net.CIDRMask(64, 128)},
+			want:       regexp.MustCompile("<nil>"),
+			err:        errors.New("invalid IPv4 address: 2001:db8:abcd:3f00::/64"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getBroadcastIPAddr(tt.localIPNet)
+			h.AssertError(t, err, tt.err)
+			h.AssertEqual(t, got, tt.want)
 		})
 	}
 }

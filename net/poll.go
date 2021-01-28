@@ -3,7 +3,6 @@ package net
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"sync"
 	"time"
 
@@ -26,7 +25,7 @@ func PollDevices(ctx context.Context, listener *UDPListener, devices miio.Device
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go func() { defer wg.Done(); sendPackets(ctx, listener.Connection, devices) }()
+	go func() { defer wg.Done(); sendPackets(ctx, listener, devices) }()
 
 	log.Print("[DEBUG] start updating devices")
 	var pkt UDPPacket
@@ -59,12 +58,7 @@ loop:
 	return err
 }
 
-func sendPackets(ctx context.Context, conn *net.UDPConn, devices miio.Devices) {
-	bcAddr, err := GetBroadcastUDPAddr(nil, config.C.MiioPort)
-	if err != nil {
-		log.Printf("[WARN] unable to send packets: %v", err)
-		return
-	}
+func sendPackets(ctx context.Context, listener *UDPListener, devices miio.Devices) {
 	helloPacket, _ := miio.NewHelloPacket().Encode(nil)
 	next := time.Duration(config.C.PollTimeout / 50)
 	log.Print("[DEBUG] start sending requests")
@@ -79,8 +73,8 @@ func sendPackets(ctx context.Context, conn *net.UDPConn, devices miio.Devices) {
 					if helloPacketSent {
 						break
 					}
-					log.Printf("[DEBUG] sending hello packet to %v", bcAddr)
-					if _, err := conn.WriteToUDP(helloPacket, bcAddr); err != nil {
+					log.Printf("[DEBUG] sending hello packet to %v", listener.BroadcastAddress)
+					if _, err := listener.Connection.WriteToUDP(helloPacket, listener.BroadcastAddress); err != nil {
 						log.Printf("[WARN] %v", err)
 						break
 					}
@@ -102,7 +96,7 @@ func sendPackets(ctx context.Context, conn *net.UDPConn, devices miio.Devices) {
 						break
 					}
 					log.Printf("[DEBUG] sending %s to %s (%s)", req.Data, d.Name, addr)
-					if _, err := conn.WriteToUDP(data, addr); err != nil {
+					if _, err := listener.Connection.WriteToUDP(data, addr); err != nil {
 						log.Printf("[WARN] %v", err)
 						break
 					}
@@ -123,7 +117,7 @@ func sendPackets(ctx context.Context, conn *net.UDPConn, devices miio.Devices) {
 						break
 					}
 					log.Printf("[DEBUG] sending %s to %s (%s)", req.Data, d.Name, addr)
-					if _, err := conn.WriteToUDP(data, addr); err != nil {
+					if _, err := listener.Connection.WriteToUDP(data, addr); err != nil {
 						log.Printf("[WARN] %v", err)
 						break
 					}
