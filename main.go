@@ -150,10 +150,10 @@ func nextTime(now time.Time) time.Time {
 }
 
 func setupLog(dbg bool) {
+	stripDate := log.Mapper{TimeFunc: func(s string) string { return s[11:] }}
 	if dbg {
-		log.Setup(log.Debug, log.CallerFile, log.CallerFunc, log.Msec, log.LevelBraces)
-		// mqttDebugLog = log.New(log.Debug, log.CallerDepth(1), log.CallerFile, log.CallerFunc, log.Msec, log.LevelBraces)
+		log.Setup(log.Debug, log.CallerFile, log.CallerFunc, log.Msec, log.LevelBraces, log.Map(stripDate))
 		return
 	}
-	log.Setup(log.Msec, log.LevelBraces)
+	log.Setup(log.Msec, log.LevelBraces, log.Map(stripDate))
 }
