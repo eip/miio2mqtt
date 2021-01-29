@@ -1,0 +1,35 @@
+PollInterval: 10s
+PollAheadTime: 100ms
+PollTimeout: 4s
+PushTimeout: 4s
+MQTT:
+  BrokerURL: "tcp://localhost:1883"
+Models:
+  zhimi.airmonitor.v1:
+    Params:
+      - power
+      - usb_state
+      - aqi
+      - battery
+      # - time_state
+      # - night_state
+      # - night_beg_time
+      # - night_end_time
+  yeelink.light.lamp2:
+    Params:
+      - power
+      - bright
+      - ct
+      - color_mode
+      # - lan_ctrl
+      # - save_state
+Devices:
+  AirMonitor:
+    ID: 0x11223301
+    Token: 7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e
+    Topic: home/livingroom/airmonitor
+  DeskLamp:
+    Address: 192.168.0.11
+    Token: 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f
+    Topic: home/livingroom/desklamp
+# Debug: true
