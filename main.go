@@ -66,8 +66,8 @@ func run(ctx context.Context) error {
 	for {
 		next := nextTime(time.Now())
 		if firstLoop {
-			startIn := next.Sub(time.Now())
-			if startIn >= 1500*time.Millisecond {
+			startIn := next.Sub(time.Now()) / 100 / time.Millisecond * 100 * time.Millisecond
+			if startIn > 1550*time.Millisecond {
 				fmt.Printf(" - starting in %v", startIn)
 			}
 			fmt.Println("")
