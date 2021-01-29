@@ -45,7 +45,7 @@ func main() {
 		log.Printf("[WARN] %v signal received", s)
 		cancel()
 	}()
-	fmt.Printf("miio2mqtt version %s\n", version)
+	fmt.Printf("miio2mqtt version %s", version)
 	if err := run(ctx); err != nil {
 		log.Printf("[ERROR] %v", err)
 		time.Sleep(1 * time.Second)
@@ -55,6 +55,7 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	firstLoop := true
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
@@ -64,6 +65,14 @@ func run(ctx context.Context) error {
 
 	for {
 		next := nextTime(time.Now())
+		if firstLoop {
+			startIn := next.Sub(time.Now())
+			if startIn >= 1500*time.Millisecond {
+				fmt.Printf(" - starting in %v", startIn)
+			}
+			fmt.Println("")
+			firstLoop = false
+		}
 		select {
 		case <-ctx.Done():
 			return nil
