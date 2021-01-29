@@ -78,7 +78,7 @@ func run(ctx context.Context) error {
 			return nil
 		case <-time.After(next.Sub(time.Now())):
 		}
-		devices.SetStage(miio.Valid, miio.DeviceOutdated(2*config.C.PollInterval))
+		devices.SetStage(miio.Undiscovered, miio.DeviceOutdated(2*config.C.PollInterval))
 		devices.SetStage(miio.Valid, miio.DeviceUpdated)
 		listener, err := net.StartListener(ctx, &wg)
 		if err != nil {
