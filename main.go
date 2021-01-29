@@ -58,11 +58,9 @@ func run(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	client := mqtt.NewClient()
-	defer client.Disconnect()
 	messages := make(chan mqtt.Message, 100)
 	wg.Add(1)
-	go func() { defer wg.Done(); processMessages(ctx, client, messages) }()
+	go func() { defer wg.Done(); processMessages(ctx, messages) }()
 
 	for {
 		next := nextTime(time.Now())
@@ -118,7 +116,9 @@ func initDevices() {
 	}
 }
 
-func processMessages(ctx context.Context, client *mqtt.Client, messages <-chan mqtt.Message) {
+func processMessages(ctx context.Context, messages <-chan mqtt.Message) {
+	client := mqtt.NewClient()
+	defer client.Disconnect()
 	for {
 		select {
 		case <-ctx.Done():
