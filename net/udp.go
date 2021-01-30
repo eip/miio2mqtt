@@ -4,9 +4,9 @@ import (
 	"context"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/eip/miio2mqtt/config"
+	"github.com/eip/miio2mqtt/miio"
 	log "github.com/go-pkgz/lgr"
 )
 
@@ -23,9 +23,9 @@ type UDPListener struct {
 }
 
 type UDPPacket struct {
-	Address net.UDPAddr
-	Data    []byte
-	Time    time.Time
+	Address   net.UDPAddr
+	Data      []byte
+	TimeStamp miio.TimeStamp
 }
 
 func StartListener(ctx context.Context, wg *sync.WaitGroup) (*UDPListener, error) {
@@ -91,14 +91,14 @@ func listenUDPPackets(l *UDPListener) {
 			}
 			continue
 		}
-		pktTime := time.Now()
+		pktTime := miio.Now()
 		select {
 		case <-l.ctx.Done():
 			log.Print("[DEBUG] stop listening for UDP packets")
 			l.Stop()
 			return
-		case l.Packets <- UDPPacket{Address: *addr, Data: buffer[:n], Time: pktTime}:
-			log.Printf("[DEBUG] %d bytes received from %v at %s", n, addr, pktTime.Format("15:04:05.999"))
+		case l.Packets <- UDPPacket{Address: *addr, Data: buffer[:n], TimeStamp: pktTime}:
+			log.Printf("[DEBUG] %d bytes received from %v", n, addr)
 		}
 	}
 }

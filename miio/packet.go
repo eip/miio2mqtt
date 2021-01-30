@@ -8,20 +8,19 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"time"
 
 	h "github.com/eip/miio2mqtt/helpers"
 )
 
 // Packet represents a miIO protocol network packet
 type Packet struct {
-	Magic    uint16
-	Length   uint16
-	Unused   uint32
-	DeviceID uint32
-	Stamp    uint32
-	Checksum [16]byte
-	Data     []byte
+	Magic     uint16
+	Length    uint16
+	Unused    uint32
+	DeviceID  uint32
+	TimeStamp TimeStamp
+	Checksum  [16]byte
+	Data      []byte
 }
 
 var errInvalidMagicField = errors.New("invalid magic field")
@@ -35,26 +34,26 @@ var errInvalidPadding = errors.New("invalid padding")
 // NewHelloPacket creates a Hello packet
 func NewHelloPacket() *Packet {
 	p := Packet{
-		Magic:    0x2131,
-		Length:   0x0020,
-		Unused:   0xffffffff,
-		DeviceID: 0xffffffff,
-		Stamp:    0xffffffff,
-		Checksum: [16]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-		Data:     []byte{},
+		Magic:     0x2131,
+		Length:    0x0020,
+		Unused:    0xffffffff,
+		DeviceID:  0xffffffff,
+		TimeStamp: 0xffffffff,
+		Checksum:  [16]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Data:      []byte{},
 	}
 	return &p
 }
 
 // NewPacket creates a packet with the given properties
-func NewPacket(deviceID uint32, time time.Time, data []byte) *Packet {
+func NewPacket(deviceID uint32, timeStamp TimeStamp, data []byte) *Packet {
 	p := Packet{
-		Magic:    0x2131,
-		Length:   0x0020 + uint16(len(data)),
-		Unused:   0x00000000,
-		DeviceID: deviceID,
-		Stamp:    uint32(time.Unix()),
-		Data:     make([]byte, len(data)),
+		Magic:     0x2131,
+		Length:    0x0020 + uint16(len(data)),
+		Unused:    0x00000000,
+		DeviceID:  deviceID,
+		TimeStamp: timeStamp,
+		Data:      make([]byte, len(data)),
 	}
 	copy(p.Data, data)
 	// TODO calc checksum
@@ -89,7 +88,7 @@ func decode(data []byte) (*Packet, error) {
 	}
 	p := Packet{}
 	buf := bytes.NewReader(data)
-	for _, v := range []interface{}{&p.Magic, &p.Length, &p.Unused, &p.DeviceID, &p.Stamp, p.Checksum[:]} {
+	for _, v := range []interface{}{&p.Magic, &p.Length, &p.Unused, &p.DeviceID, &p.TimeStamp, p.Checksum[:]} {
 		if err := binary.Read(buf, binary.BigEndian, v); err != nil {
 			return nil, err
 		}
@@ -114,7 +113,7 @@ func (p *Packet) encode(checksum []byte) ([]byte, error) {
 	} else if len(checksum) != 16 {
 		return nil, errInvalidChecksumLength
 	}
-	for _, v := range []interface{}{p.Magic, p.Length, p.Unused, p.DeviceID, p.Stamp, checksum, p.Data} {
+	for _, v := range []interface{}{p.Magic, p.Length, p.Unused, p.DeviceID, p.TimeStamp, checksum, p.Data} {
 		if dataLen(v) == 0 { // empty []byte
 			continue
 		}
@@ -160,15 +159,13 @@ func (p *Packet) Validate(token []byte) error {
 }
 
 // Str describes the packet as a string
-func (p *Packet) Str() string {
-	if p.Unused == 0xffffffff && p.DeviceID == 0xffffffff && p.Stamp == 0xffffffff {
+func (p *Packet) Format() string {
+	if p.Unused == 0xffffffff && p.DeviceID == 0xffffffff && p.TimeStamp == 0xffffffff {
 		return "<Hello Packet>"
 	}
-	// ts := time.Unix(int64(p.Stamp), 0).UTC().Format("2006-01-02 15:04:05")
-	ts := time.Duration(p.Stamp) * time.Second
 	format := "{deviceID: %08x, time: %v}"
 	if len(p.Data) == 0 {
-		return fmt.Sprintf(format, p.DeviceID, ts)
+		return fmt.Sprintf(format, p.DeviceID, p.TimeStamp)
 	}
 	format = format[:len(format)-1] + ", data: "
 	if h.IsPrintableASCII(p.Data) {
@@ -176,11 +173,7 @@ func (p *Packet) Str() string {
 	} else {
 		format += "%x}"
 	}
-	return fmt.Sprintf(format, p.DeviceID, ts, p.Data)
-}
-
-func (p *Packet) TimeStamp() int64 {
-	return int64(p.Stamp) * int64(time.Second)
+	return fmt.Sprintf(format, p.DeviceID, p.TimeStamp, p.Data)
 }
 
 func (p *Packet) validateChecksum(token []byte) (bool, error) {

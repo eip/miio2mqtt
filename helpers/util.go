@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"encoding/hex"
-	"time"
 
 	log "github.com/go-pkgz/lgr"
 )
@@ -52,20 +51,4 @@ func IsPrintableASCII(b []byte) bool {
 		}
 	}
 	return true
-}
-
-func TimeDiff(t1, t2 time.Time) time.Duration {
-	diff := t1.Sub(t2)
-	if diff < 0 {
-		diff = -diff
-	}
-	return time.Duration(diff)
-}
-
-func TimeStampDiff(t1, t2 int64) time.Duration {
-	diff := t1 - t2
-	if diff < 0 {
-		diff = -diff
-	}
-	return time.Duration(diff)
 }

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/eip/miio2mqtt/config"
-	h "github.com/eip/miio2mqtt/helpers"
 	"github.com/eip/miio2mqtt/miio"
 	"github.com/eip/miio2mqtt/mqtt"
 	log "github.com/go-pkgz/lgr"
@@ -164,8 +163,8 @@ func processHelloReply(pkt UDPPacket, devices miio.Devices) bool {
 		log.Printf("[DEBUG] hello reply from already discovered %s", d.Name)
 		return false
 	}
-	log.Printf("[DEBUG] hello reply from %s (stage=%s): %s", d.Name, d.GetStage(), reply.Str())
-	d.TimeShift = pkt.Time.Sub(time.Unix(int64(reply.Stamp), 0))
+	log.Printf("[DEBUG] hello reply from %s (stage=%s): %s", d.Name, d.GetStage(), reply.Format())
+	d.SetTimeShift(pkt.TimeStamp, reply.TimeStamp)
 	if updateDID {
 		d.ID = did
 		devices[did] = d
@@ -200,11 +199,12 @@ func processReply(pkt UDPPacket, devices miio.Devices, messages chan<- mqtt.Mess
 	}
 	log.Printf("[DEBUG] reply from %s (stage=%s): %s", d.Name, d.GetStage(), reply.Data)
 
-	replyTS := int64(reply.Stamp) * 1e9
-	deviceTS := pkt.Time.Add(-d.TimeShift).UnixNano() / 1e6 * 1e6
-	if h.TimeStampDiff(replyTS, deviceTS) > time.Second {
-		log.Printf("[INFO] last reply time %v not in sync with device time %v [%v]", time.Duration(replyTS), time.Duration(deviceTS), time.Duration(replyTS-deviceTS))
-	}
+	// replyTS := int64(reply.Stamp) * 1e9
+	// deviceTS, _ := d.GetTimeStamp(pkt.Time)
+	// deviceTS = deviceTS / 1e6 * 1e6
+	// if h.TimeStampDiff(replyTS, deviceTS) > time.Millisecond {
+	// 	log.Printf("[INFO] last reply time %v not in sync with device time %v [%v]", time.Duration(replyTS), time.Duration(deviceTS), time.Duration(replyTS-deviceTS))
+	// }
 
 	parsed := miio.ParseReply(reply.Data)
 	switch parsed.Type {
@@ -244,6 +244,7 @@ func processReply(pkt UDPPacket, devices miio.Devices, messages chan<- mqtt.Mess
 		} else {
 			log.Printf("[INFO] %s state unchanged", d.Name)
 		}
+		d.SetTimeShift(pkt.TimeStamp, reply.TimeStamp)
 		d.SetUpdatedNow()
 		d.SetStage(miio.Updated)
 		if d.StateChangeUnpublished() {

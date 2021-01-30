@@ -63,6 +63,7 @@ func run(ctx context.Context) error {
 	wg.Add(1)
 	go func() { defer wg.Done(); processMessages(ctx, messages) }()
 
+	deviceUpdateTimeout := 2 * miio.TimeStamp(config.C.PollInterval/time.Second)
 	for {
 		next := nextTime(time.Now())
 		if firstLoop {
@@ -78,7 +79,7 @@ func run(ctx context.Context) error {
 			return nil
 		case <-time.After(next.Sub(time.Now())):
 		}
-		devices.SetStage(miio.Undiscovered, miio.DeviceOutdated(2*config.C.PollInterval))
+		devices.SetStage(miio.Undiscovered, miio.DeviceOutdated(deviceUpdateTimeout))
 		devices.SetStage(miio.Valid, miio.DeviceUpdated)
 		listener, err := net.StartListener(ctx, &wg)
 		if err != nil {
