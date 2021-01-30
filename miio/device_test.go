@@ -4,12 +4,10 @@ import (
 	"errors"
 	"regexp"
 	"testing"
-	"time"
 
 	h "github.com/eip/miio2mqtt/helpers"
 )
 
-var sampleTime time.Time = time.Unix(111*3600+22*60+33, 0) // unix timestamp = 0x00061e39
 var testLog = h.InitTestLog()
 
 func TestDeviceStage_String(t *testing.T) {
@@ -33,87 +31,161 @@ func TestDeviceStage_String(t *testing.T) {
 	}
 }
 
-func TestDevice_Now(t *testing.T) {
+func TestDevice_GetTimeStamp(t *testing.T) {
 	tests := []struct {
 		name   string
 		device Device
-		want   time.Time
+		now    TimeStamp
+		want   TimeStamp
 		err    error
 	}{
 		{
 			name:   "Device time shift is not set",
 			device: Device{},
-			want:   time.Unix(0, 0),
+			now:    sampleTS,
+			want:   0,
 			err:    errors.New("device time shift is not set"),
 		},
 		{
 			name:   "Device time shift 1",
-			device: Device{TimeShift: 1000 * time.Hour},
-			want:   time.Now().Add(-1000 * time.Hour),
+			device: Device{timeShift: uint32(1000 * sec)},
+			now:    sampleTS,
+			want:   sampleTS - 1000*sec,
 		},
 		{
 			name:   "Device time shift 2",
-			device: Device{TimeShift: -1000 * time.Hour},
-			want:   time.Now().Add(1000 * time.Hour),
+			device: Device{timeShift: uint32(1000 * hour)},
+			now:    sampleTS,
+			want:   sampleTS - 1000*hour,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.device.Now()
+			got, err := tt.device.GetTimeStamp(tt.now)
 			h.AssertError(t, err, tt.err)
-			if h.TimeDiff(got, tt.want) > time.Millisecond {
+			if TimeStampDiff(got, tt.want) > sec {
 				h.AssertEqual(t, got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_deviceRequest(t *testing.T) {
+func TestDevice_Now(t *testing.T) {
 	tests := []struct {
-		name       string
-		data       string
-		deviceID   uint32
-		requestID  uint32
-		deviceTime time.Time
-		token      []byte
-		wantPkt    *Packet
-		wantData   []byte
-		err        error
+		name   string
+		device Device
+		want   TimeStamp
+		err    error
 	}{
 		{
-			name:       "Sample Request",
-			data:       "123456789@ABCDEFGHI", // cspell: disable-line
-			deviceID:   0x00112233,
-			requestID:  0,
-			deviceTime: sampleTime,
-			token:      h.FromHex("00112233445566778899aabbccddeeff"),
-			wantPkt:    NewPacket(0x00112233, sampleTime, h.FromHex("31323334353637383940414243444546474849")),
-			wantData:   h.FromHex("21310040000000000011223300061e39b0cbb8837ed9a65a70165f2b7b4102722b487e7eed802b7df35c224caab8d216e43262c38b9cc073782c148668387d9e"),
+			name:   "Device time shift is not set",
+			device: Device{},
+			want:   0,
+			err:    errors.New("device time shift is not set"),
 		},
 		{
-			name:       "Invalid Token",
-			data:       "123456789@ABCDEFGHI", // cspell: disable-line
-			deviceID:   0x00112233,
-			requestID:  0,
-			deviceTime: sampleTime,
-			token:      h.FromHex("00112233445566778899aabbccddeeff00"),
-			wantPkt:    NewPacket(0x00112233, sampleTime, h.FromHex("31323334353637383940414243444546474849")),
-			err:        errInvalidTokenLength,
+			name:   "Device time shift 1",
+			device: Device{timeShift: uint32(1000 * sec)},
+			want:   Now() - 1000*sec,
 		},
 		{
-			name:       "Real Request",
-			data:       `{"method":"miIO.info","params":[],"id":#}`,
-			deviceID:   0x00112233,
-			requestID:  123,
-			deviceTime: sampleTime,
-			token:      h.FromHex("00112233445566778899aabbccddeeff"),
-			wantPkt:    NewPacket(0x00112233, sampleTime, []byte(`{"method":"miIO.info","params":[],"id":123}`)),
-			wantData:   h.FromHex("21310050000000000011223300061e39bc379b48c96b52ffd80dcbd9153594d12f42719f20d1969cd734b11bee043ad5a740d19c6e38ff8438a641c565d7b6f68c0c7008b88bc6869531a7ceac7818e2"),
+			name:   "Device time shift 2",
+			device: Device{timeShift: uint32(1000 * hour)},
+			want:   Now() - 1000*hour,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotPkt, gotData, err := deviceRequest([]byte(tt.data), tt.deviceID, tt.requestID, tt.deviceTime, tt.token)
+			got, err := tt.device.Now()
+			h.AssertError(t, err, tt.err)
+			if TimeStampDiff(got, tt.want) > 1*sec {
+				h.AssertEqual(t, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevice_SetTimeShift(t *testing.T) {
+	now := Now()
+	tests := []struct {
+		name    string
+		device  Device
+		now     TimeStamp
+		replyTS TimeStamp
+		want    uint32
+		err     error
+	}{
+		{
+			name:    "error",
+			device:  Device{timeShift: uint32(10 * hour)},
+			now:     now,
+			replyTS: now + 1*sec,
+			want:    uint32(10 * hour),
+			err:     errors.New("device time cannot be in future"),
+		},
+		{
+			name:    "success",
+			device:  Device{timeShift: uint32(10 * hour)},
+			now:     now,
+			replyTS: sampleTS,
+			want:    uint32(now - sampleTS),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.device.SetTimeShift(tt.now, tt.replyTS)
+			h.AssertError(t, err, tt.err)
+			h.AssertEqual(t, tt.device.timeShift, tt.want)
+		})
+	}
+}
+
+func Test_deviceRequest(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      string
+		deviceID  uint32
+		requestID uint32
+		timeStamp TimeStamp
+		token     []byte
+		wantPkt   *Packet
+		wantData  []byte
+		err       error
+	}{
+		{
+			name:      "Sample Request",
+			data:      "123456789@ABCDEFGHI", // cspell: disable-line
+			deviceID:  0x00112233,
+			requestID: 0,
+			timeStamp: sampleTS,
+			token:     h.FromHex("00112233445566778899aabbccddeeff"),
+			wantPkt:   NewPacket(0x00112233, sampleTS, h.FromHex("31323334353637383940414243444546474849")),
+			wantData:  h.FromHex("21310040000000000011223300061e39b0cbb8837ed9a65a70165f2b7b4102722b487e7eed802b7df35c224caab8d216e43262c38b9cc073782c148668387d9e"),
+		},
+		{
+			name:      "Invalid Token",
+			data:      "123456789@ABCDEFGHI", // cspell: disable-line
+			deviceID:  0x00112233,
+			requestID: 0,
+			timeStamp: sampleTS,
+			token:     h.FromHex("00112233445566778899aabbccddeeff00"),
+			wantPkt:   NewPacket(0x00112233, sampleTS, h.FromHex("31323334353637383940414243444546474849")),
+			err:       errInvalidTokenLength,
+		},
+		{
+			name:      "Real Request",
+			data:      `{"method":"miIO.info","params":[],"id":#}`,
+			deviceID:  0x00112233,
+			requestID: 123,
+			timeStamp: sampleTS,
+			token:     h.FromHex("00112233445566778899aabbccddeeff"),
+			wantPkt:   NewPacket(0x00112233, sampleTS, []byte(`{"method":"miIO.info","params":[],"id":123}`)),
+			wantData:  h.FromHex("21310050000000000011223300061e39bc379b48c96b52ffd80dcbd9153594d12f42719f20d1969cd734b11bee043ad5a740d19c6e38ff8438a641c565d7b6f68c0c7008b88bc6869531a7ceac7818e2"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotPkt, gotData, err := deviceRequest([]byte(tt.data), tt.deviceID, tt.requestID, tt.timeStamp, tt.token)
 			h.AssertError(t, err, tt.err)
 			h.AssertEqual(t, gotPkt, tt.wantPkt)
 			// h.AssertEqual(t, gotPkt.Data, tt.wantPkt.Data)
@@ -138,10 +210,10 @@ func TestDevice_Request(t *testing.T) {
 		},
 		{
 			name:          "Real Request",
-			device:        Device{DeviceCfg: DeviceCfg{ID: 0x00112233}, Token: [16]byte{}, TimeShift: 1000 * time.Hour, requestID: 122},
+			device:        Device{DeviceCfg: DeviceCfg{ID: 0x00112233}, Token: [16]byte{}, timeShift: uint32(1000 * hour), requestID: 122},
 			data:          `{"method":"miIO.info","params":[],"id":#}`,
 			wantRequestID: 123,
-			wantPkt:       NewPacket(0x00112233, time.Now().Add(-1000*time.Hour), []byte(`{"method":"miIO.info","params":[],"id":123}`)),
+			wantPkt:       NewPacket(0x00112233, Now()-1000*hour, []byte(`{"method":"miIO.info","params":[],"id":123}`)),
 		},
 	}
 	for _, tt := range tests {
@@ -149,8 +221,8 @@ func TestDevice_Request(t *testing.T) {
 			gotPkt, _, err := tt.device.Request([]byte(tt.data))
 			h.AssertError(t, err, tt.err)
 			h.AssertEqual(t, tt.device.requestID, tt.wantRequestID)
-			if gotPkt != nil && h.TimeStampDiff(gotPkt.TimeStamp(), tt.wantPkt.TimeStamp()) <= time.Second {
-				tt.wantPkt.Stamp = gotPkt.Stamp
+			if gotPkt != nil && TimeStampDiff(gotPkt.TimeStamp, tt.wantPkt.TimeStamp) <= 1*sec {
+				tt.wantPkt.TimeStamp = gotPkt.TimeStamp
 			}
 			h.AssertEqual(t, gotPkt, tt.wantPkt)
 		})
@@ -163,10 +235,10 @@ func TestDevice_GetStage(t *testing.T) {
 		device Device
 		want   DeviceStage
 	}{
-		{name: "Undiscovered", device: Device{stage: int32(Undiscovered)}, want: Undiscovered},
-		{name: "Found", device: Device{stage: int32(Found)}, want: Found},
-		{name: "Valid", device: Device{stage: int32(Valid)}, want: Valid},
-		{name: "Updated", device: Device{stage: int32(Updated)}, want: Updated},
+		{name: "Undiscovered", device: Device{stage: Undiscovered}, want: Undiscovered},
+		{name: "Found", device: Device{stage: Found}, want: Found},
+		{name: "Valid", device: Device{stage: Valid}, want: Valid},
+		{name: "Updated", device: Device{stage: Updated}, want: Updated},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -183,12 +255,12 @@ func TestDevice_SetStage(t *testing.T) {
 		stage  DeviceStage
 		want   DeviceStage
 	}{
-		{name: "Undiscovered", device: Device{stage: int32(Updated)}, stage: Undiscovered, want: Undiscovered},
-		{name: "Found", device: Device{stage: int32(Undiscovered)}, stage: Found, want: Found},
-		{name: "Valid", device: Device{stage: int32(Found)}, stage: Valid, want: Valid},
-		{name: "Updated", device: Device{stage: int32(Valid)}, stage: Updated, want: Updated},
-		{name: "Undiscovered 1", device: Device{stage: int32(Updated)}, stage: -1, want: Undiscovered},
-		{name: "Undiscovered 2", device: Device{stage: int32(Updated)}, stage: 10, want: Undiscovered},
+		{name: "Undiscovered", device: Device{stage: Updated}, stage: Undiscovered, want: Undiscovered},
+		{name: "Found", device: Device{stage: Undiscovered}, stage: Found, want: Found},
+		{name: "Valid", device: Device{stage: Found}, stage: Valid, want: Valid},
+		{name: "Updated", device: Device{stage: Valid}, stage: Updated, want: Updated},
+		{name: "Undiscovered 1", device: Device{stage: Updated}, stage: -1, want: Undiscovered},
+		{name: "Undiscovered 2", device: Device{stage: Updated}, stage: 10, want: Undiscovered},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -198,32 +270,27 @@ func TestDevice_SetStage(t *testing.T) {
 	}
 }
 
-func TestDevice_GetUpdatedTime(t *testing.T) {
+func TestDevice_UpdatedAt(t *testing.T) {
 	tests := []struct {
 		name   string
 		device Device
-		want   time.Time
+		want   TimeStamp
 	}{
 		{
-			name:   "Device updated at is not set",
+			name:   "Not set",
 			device: Device{},
-			want:   time.Unix(0, 0),
+			want:   0,
 		},
 		{
-			name:   "Device updated at 2021-01-20",
-			device: Device{updatedAt: sampleTime.UnixNano()},
-			want:   time.Unix(0, sampleTime.UnixNano()),
-		},
-		{
-			name:   "Device updated at 1918-12-12",
-			device: Device{updatedAt: -sampleTime.UnixNano()},
-			want:   time.Unix(0, -sampleTime.UnixNano()),
+			name:   "1970-01-05 15:22:33",
+			device: Device{updatedAt: sampleTS},
+			want:   sampleTS,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.device.GetUpdatedTime()
-			if h.TimeDiff(got, tt.want) > time.Millisecond {
+			got := tt.device.UpdatedAt()
+			if TimeStampDiff(got, tt.want) > 1*sec {
 				h.AssertEqual(t, got, tt.want)
 			}
 		})
@@ -231,11 +298,11 @@ func TestDevice_GetUpdatedTime(t *testing.T) {
 }
 
 func TestDevice_SetUpdatedNow(t *testing.T) {
-	device := Device{updatedAt: sampleTime.UnixNano()}
-	h.AssertEqual(t, device.updatedAt, int64(sampleTime.UnixNano()))
-	now := time.Now().UnixNano()
+	device := Device{updatedAt: sampleTS}
+	h.AssertEqual(t, device.updatedAt, sampleTS)
+	now := Now()
 	device.SetUpdatedNow()
-	if h.TimeStampDiff(device.updatedAt, now) > time.Millisecond {
+	if TimeStampDiff(device.updatedAt, now) > sec {
 		h.AssertEqual(t, device.updatedAt, now)
 	}
 }
@@ -244,28 +311,16 @@ func TestDevice_UpdatedIn(t *testing.T) {
 	tests := []struct {
 		name   string
 		device Device
-		want   time.Duration
+		want   TimeStamp
 	}{
-		{
-			name:   "Device updated at is not set",
-			device: Device{},
-			want:   time.Duration(time.Now().UnixNano()),
-		},
-		{
-			name:   "Device updated at 2021-01-20",
-			device: Device{updatedAt: sampleTime.UnixNano()},
-			want:   time.Now().Sub(sampleTime),
-		},
-		{
-			name:   "Device updated at 1918-12-12",
-			device: Device{updatedAt: -sampleTime.UnixNano()},
-			want:   time.Now().Sub(time.Unix(0, -sampleTime.UnixNano())),
-		},
+		{name: "A minute ago", device: Device{updatedAt: Now() - 1*min}, want: 1 * min},
+		{name: "In future", device: Device{updatedAt: Now() + 1*min}, want: 0},
+		{name: "updatedAt is not set", device: Device{}, want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.device.UpdatedIn()
-			if h.TimeStampDiff(int64(got), int64(tt.want)) > time.Millisecond {
+			if TimeStampDiff(got, tt.want) > 1*sec {
 				h.AssertEqual(t, got, tt.want)
 			}
 		})
@@ -273,31 +328,49 @@ func TestDevice_UpdatedIn(t *testing.T) {
 }
 
 func TestDevice_SetStateChangedNow(t *testing.T) {
-	device := Device{stateChangedAt: sampleTime.UnixNano()}
-	h.AssertEqual(t, device.stateChangedAt, int64(sampleTime.UnixNano()))
-	now := time.Now().UnixNano()
+	device := Device{stateChangedAt: sampleTS}
+	h.AssertEqual(t, device.stateChangedAt, sampleTS)
+	now := Now()
 	device.SetStateChangedNow()
-	if h.TimeStampDiff(device.stateChangedAt, now) > time.Millisecond {
+	if TimeStampDiff(device.stateChangedAt, now) > sec {
 		h.AssertEqual(t, device.stateChangedAt, now)
 	}
 }
 
 func TestDevice_SetStatePublishedNow(t *testing.T) {
-	device := Device{statePublishedAt: sampleTime.UnixNano()}
-	h.AssertEqual(t, device.statePublishedAt, int64(sampleTime.UnixNano()))
-	now := time.Now().UnixNano()
+	device := Device{statePublishedAt: sampleTS}
+	h.AssertEqual(t, device.statePublishedAt, sampleTS)
+	now := Now()
 	device.SetStatePublishedNow()
-	if h.TimeStampDiff(device.statePublishedAt, now) > time.Millisecond {
+	if TimeStampDiff(device.statePublishedAt, now) > sec {
 		h.AssertEqual(t, device.statePublishedAt, now)
+	}
+}
+
+func TestDevice_StateChangeUnpublished(t *testing.T) {
+	tests := []struct {
+		name   string
+		device Device
+		want   bool
+	}{
+		{name: "state published before changed", device: Device{stateChangedAt: sampleTS, statePublishedAt: sampleTS - 1*sec}, want: true},
+		{name: "state published and changed same time", device: Device{stateChangedAt: sampleTS, statePublishedAt: sampleTS}, want: false},
+		{name: "state published after changed", device: Device{stateChangedAt: sampleTS - 1*sec, statePublishedAt: sampleTS}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.device.StateChangeUnpublished()
+			h.AssertEqual(t, got, tt.want)
+		})
 	}
 }
 
 func TestDevices_Count(t *testing.T) {
 	devices := Devices{
-		1: &Device{stage: int32(Undiscovered)},
-		2: &Device{stage: int32(Found)},
-		3: &Device{stage: int32(Valid)},
-		4: &Device{stage: int32(Updated)},
+		1: &Device{stage: Undiscovered},
+		2: &Device{stage: Found},
+		3: &Device{stage: Valid},
+		4: &Device{stage: Updated},
 	}
 	tests := []struct {
 		name  string
@@ -319,10 +392,10 @@ func TestDevices_Count(t *testing.T) {
 
 func TestDevices_SetStage(t *testing.T) {
 	devices := Devices{
-		1: &Device{stage: int32(Undiscovered)},
-		2: &Device{stage: int32(Found)},
-		3: &Device{stage: int32(Valid)},
-		4: &Device{stage: int32(Updated)},
+		1: &Device{stage: Undiscovered},
+		2: &Device{stage: Found},
+		3: &Device{stage: Valid},
+		4: &Device{stage: Updated},
 	}
 	tests := []struct {
 		name      string
@@ -349,10 +422,10 @@ func Test_DeviceFound(t *testing.T) {
 		device Device
 		want   bool
 	}{
-		{name: "Undiscovered", device: Device{stage: int32(Undiscovered)}, want: false},
-		{name: "Found", device: Device{stage: int32(Found)}, want: true},
-		{name: "Valid", device: Device{stage: int32(Valid)}, want: true},
-		{name: "Updated", device: Device{stage: int32(Updated)}, want: true},
+		{name: "Undiscovered", device: Device{stage: Undiscovered}, want: false},
+		{name: "Found", device: Device{stage: Found}, want: true},
+		{name: "Valid", device: Device{stage: Valid}, want: true},
+		{name: "Updated", device: Device{stage: Updated}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -368,10 +441,10 @@ func Test_DeviceValid(t *testing.T) {
 		device Device
 		want   bool
 	}{
-		{name: "Undiscovered", device: Device{stage: int32(Undiscovered)}, want: false},
-		{name: "Found", device: Device{stage: int32(Found)}, want: false},
-		{name: "Valid", device: Device{stage: int32(Valid)}, want: true},
-		{name: "Updated", device: Device{stage: int32(Updated)}, want: true},
+		{name: "Undiscovered", device: Device{stage: Undiscovered}, want: false},
+		{name: "Found", device: Device{stage: Found}, want: false},
+		{name: "Valid", device: Device{stage: Valid}, want: true},
+		{name: "Updated", device: Device{stage: Updated}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -387,10 +460,10 @@ func Test_DeviceUpdated(t *testing.T) {
 		device Device
 		want   bool
 	}{
-		{name: "Undiscovered", device: Device{stage: int32(Undiscovered)}, want: false},
-		{name: "Found", device: Device{stage: int32(Found)}, want: false},
-		{name: "Valid", device: Device{stage: int32(Valid)}, want: false},
-		{name: "Updated", device: Device{stage: int32(Updated)}, want: true},
+		{name: "Undiscovered", device: Device{stage: Undiscovered}, want: false},
+		{name: "Found", device: Device{stage: Found}, want: false},
+		{name: "Valid", device: Device{stage: Valid}, want: false},
+		{name: "Updated", device: Device{stage: Updated}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -406,10 +479,10 @@ func Test_AnyDevice(t *testing.T) {
 		device Device
 		want   bool
 	}{
-		{name: "Undiscovered", device: Device{stage: int32(Undiscovered)}, want: true},
-		{name: "Found", device: Device{stage: int32(Found)}, want: true},
-		{name: "Valid", device: Device{stage: int32(Valid)}, want: true},
-		{name: "Updated", device: Device{stage: int32(Updated)}, want: true},
+		{name: "Undiscovered", device: Device{stage: Undiscovered}, want: true},
+		{name: "Found", device: Device{stage: Found}, want: true},
+		{name: "Valid", device: Device{stage: Valid}, want: true},
+		{name: "Updated", device: Device{stage: Updated}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -425,10 +498,10 @@ func Test_DeviceNeedsUpdate(t *testing.T) {
 		device Device
 		want   bool
 	}{
-		{name: "Undiscovered", device: Device{stage: int32(Undiscovered)}, want: true},
-		{name: "Found", device: Device{stage: int32(Found)}, want: true},
-		{name: "Valid", device: Device{stage: int32(Valid)}, want: true},
-		{name: "Updated", device: Device{stage: int32(Updated)}, want: false},
+		{name: "Undiscovered", device: Device{stage: Undiscovered}, want: true},
+		{name: "Found", device: Device{stage: Found}, want: true},
+		{name: "Valid", device: Device{stage: Valid}, want: true},
+		{name: "Updated", device: Device{stage: Updated}, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -442,18 +515,18 @@ func Test_DeviceOutdated(t *testing.T) {
 	tests := []struct {
 		name    string
 		device  Device
-		timeout time.Duration
+		timeout TimeStamp
 		want    bool
 		logRe   *regexp.Regexp
 	}{
-		{name: "Undiscovered", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Undiscovered)}, timeout: time.Minute, want: false},
-		{name: "Undiscovered timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Undiscovered)}, timeout: time.Minute, want: false},
-		{name: "Found", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Found)}, timeout: time.Minute, want: false},
-		{name: "Found timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Found)}, timeout: time.Minute, want: true, logRe: logRe},
-		{name: "Valid", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Valid)}, timeout: time.Minute, want: false},
-		{name: "Valid timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Valid)}, timeout: time.Minute, want: true, logRe: logRe},
-		{name: "Updated", device: Device{updatedAt: time.Now().UnixNano(), stage: int32(Updated)}, timeout: time.Minute, want: false},
-		{name: "Updated timeout", device: Device{updatedAt: time.Now().Add(-61 * time.Second).UnixNano(), stage: int32(Updated)}, timeout: time.Minute, want: true, logRe: logRe},
+		{name: "Undiscovered", device: Device{updatedAt: Now(), stage: Undiscovered}, timeout: min, want: false},
+		{name: "Undiscovered timeout", device: Device{updatedAt: Now() - 61*sec, stage: Undiscovered}, timeout: min, want: false},
+		{name: "Found", device: Device{updatedAt: Now(), stage: Found}, timeout: min, want: false},
+		{name: "Found timeout", device: Device{updatedAt: Now() - 61*sec, stage: Found}, timeout: min, want: true, logRe: logRe},
+		{name: "Valid", device: Device{updatedAt: Now(), stage: Valid}, timeout: min, want: false},
+		{name: "Valid timeout", device: Device{updatedAt: Now() - 61*sec, stage: Valid}, timeout: min, want: true, logRe: logRe},
+		{name: "Updated", device: Device{updatedAt: Now(), stage: Updated}, timeout: min, want: false},
+		{name: "Updated timeout", device: Device{updatedAt: Now() - 61*sec, stage: Updated}, timeout: min, want: true, logRe: logRe},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

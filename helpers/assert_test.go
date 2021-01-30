@@ -5,7 +5,14 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
+	"time"
 )
+
+type stringer int64
+
+func (ts stringer) String() string {
+	return fmt.Sprintf("%#016X", int64(ts))
+}
 
 func Test_formatValue(t *testing.T) {
 	tests := []struct {
@@ -29,6 +36,8 @@ func Test_formatValue(t *testing.T) {
 		{name: "bool true", value: bool(true), want: "true"},
 		{name: "*bool true", value: func(v bool) *bool { return &v }(true), want: "true"},
 		{name: "bool false", value: bool(false), want: "false"},
+		{name: "Duration", value: time.Duration(11*3600+22*60+33) * time.Second, want: "11h22m33s"},
+		{name: "stringer", value: stringer(237), want: "0X00000000000000ED"},
 		{
 			name:  "[]byte hex",
 			value: FromHex("21310033000000000011223300061e390000000000000000000000000000000031323334353637383940414243444546474849"),

@@ -17,7 +17,10 @@ func AssertEqual(t T, got, want interface{}) {
 	if matchString(got, want) || reflect.DeepEqual(got, want) {
 		return
 	}
-	t.Error(formatError(formatValue(got), formatValue(want)))
+	// t.Error(formatError(formatValue(got), formatValue(want)))
+	sgot := formatValue(got)
+	swant := formatValue(want)
+	t.Error(formatError(sgot, swant))
 }
 
 func AssertError(t T, got, want error) {
@@ -65,6 +68,12 @@ func formatValue(value interface{}) string {
 		k = v.Kind()
 	}
 	value = v.Interface()
+	switch value := value.(type) {
+	case fmt.Stringer:
+		return value.String()
+	case fmt.Formatter:
+		return fmt.Sprint(value)
+	}
 	switch k {
 	case reflect.Bool:
 		return fmt.Sprintf("%v", value)
