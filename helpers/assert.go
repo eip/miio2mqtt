@@ -4,26 +4,20 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"testing"
 )
 
-type T interface {
-	Helper()
-	Error(args ...interface{})
-	Fatalf(format string, args ...interface{})
-}
-
-func AssertEqual(t T, got, want interface{}) {
+// AssertEqual asserts that two objects are equal.
+func AssertEqual(t testing.TB, got, want interface{}) {
 	t.Helper()
 	if matchString(got, want) || reflect.DeepEqual(got, want) {
 		return
 	}
-	// t.Error(formatError(formatValue(got), formatValue(want)))
-	sgot := formatValue(got)
-	swant := formatValue(want)
-	t.Error(formatError(sgot, swant))
+	t.Error(formatError(formatValue(got), formatValue(want)))
 }
 
-func AssertError(t T, got, want error) {
+// AssertError asserts that two error objects are both nil or equal or contain equal messages.
+func AssertError(t testing.TB, got, want error) {
 	t.Helper()
 	if got == nil && want != nil {
 		t.Fatalf("expected to get an error: %q", want)
