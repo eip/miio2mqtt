@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"regexp"
 
 	h "github.com/eip/miio2mqtt/helpers"
 )
@@ -20,8 +21,11 @@ type Packet struct {
 	DeviceID  uint32
 	TimeStamp TimeStamp
 	Checksum  [16]byte
-	Data      []byte
+	Data      PacketData
 }
+
+// PacketData represents a Packet data field
+type PacketData []byte
 
 var errInvalidMagicField = errors.New("invalid magic field")
 var errInvalidDataLength = errors.New("invalid data length")
@@ -30,6 +34,9 @@ var errInvalidChecksum = errors.New("invalid checksum")
 var errInvalidChecksumLength = errors.New("invalid checksum length")
 var errInvalidBlockSize = errors.New("invalid block size")
 var errInvalidPadding = errors.New("invalid padding")
+
+var reIsJSON = regexp.MustCompile(`(?i)^{\s*"[a-z_]+":.+}$`)
+var reJSONKey = regexp.MustCompile(`(?i)"([a-z_]+)":`)
 
 // NewHelloPacket creates a Hello packet
 func NewHelloPacket() *Packet {
@@ -158,22 +165,37 @@ func (p *Packet) Validate(token []byte) error {
 	return nil
 }
 
-// Str describes the packet as a string
-func (p *Packet) Format() string {
+// String describes the packet as a string
+func (p *Packet) String() string {
 	if p.Unused == 0xffffffff && p.DeviceID == 0xffffffff && p.TimeStamp == 0xffffffff {
 		return "<Hello Packet>"
 	}
-	format := "{deviceID: %08x, time: %v}"
+	format := "{deviceID:%#08x,uptime:%q}"
 	if len(p.Data) == 0 {
 		return fmt.Sprintf(format, p.DeviceID, p.TimeStamp)
 	}
-	format = format[:len(format)-1] + ", data: "
-	if h.IsPrintableASCII(p.Data) {
-		format += "%s}"
-	} else {
-		format += "%x}"
+	format = format[:len(format)-1] + ",data:%s}"
+	return fmt.Sprintf(format, p.DeviceID, p.TimeStamp, p.Data.string(true, true))
+}
+
+func (p *Packet) Format(state fmt.State, verb rune) {
+	type packet *Packet
+	var val string
+	switch verb {
+	case 's', 'q':
+		val = p.String()
+	case 'v':
+		if state.Flag('+') || state.Flag('#') {
+			if len(p.Data) == 0 {
+				val = fmt.Sprintf("{Magic:%04x Length:%04x Unused:%08x DeviceID:%08x TimeStamp:%v Checksum:%x}", p.Magic, p.Length, p.Unused, p.DeviceID, p.TimeStamp, p.Checksum)
+			} else {
+				val = fmt.Sprintf("{Magic:%04x Length:%04x Unused:%08x DeviceID:%08x TimeStamp:%v Checksum:%x Data:%s}", p.Magic, p.Length, p.Unused, p.DeviceID, p.TimeStamp, p.Checksum, p.Data.string(false, false))
+			}
+		} else {
+			val = p.String()
+		}
 	}
-	return fmt.Sprintf(format, p.DeviceID, p.TimeStamp, p.Data)
+	fmt.Fprint(state, val)
 }
 
 func (p *Packet) validateChecksum(token []byte) (bool, error) {
@@ -255,6 +277,35 @@ func (p *Packet) encrypt(token []byte) (*Packet, error) {
 	return &result, nil
 }
 
+func (d PacketData) String() string {
+	return d.string(false, true)
+}
+
+func (d PacketData) string(quotes, simplify bool) string {
+	if d == nil || len(d) == 0 {
+		if quotes {
+			return "\"\""
+		}
+		return ""
+	}
+	if !h.IsPrintableASCII(d) {
+		if quotes {
+			return fmt.Sprintf("\"%x\"", []byte(d))
+		}
+		return fmt.Sprintf("%x", []byte(d))
+	}
+	if isJSON(d) {
+		if simplify {
+			return string(stripJSONQuotes(d))
+		}
+		return string(d)
+	}
+	if quotes {
+		return fmt.Sprintf("%q", []byte(d))
+	}
+	return string(d)
+}
+
 func dataLen(data interface{}) int {
 	switch data := data.(type) {
 	case nil:
@@ -296,4 +347,12 @@ func pkcs7strip(data []byte, blockSize int) ([]byte, error) {
 		return nil, errInvalidPadding
 	}
 	return data[:length-padLen], nil
+}
+
+func isJSON(data []byte) bool {
+	return reIsJSON.Match(data)
+}
+
+func stripJSONQuotes(data []byte) []byte {
+	return reJSONKey.ReplaceAll(data, []byte("$1:"))
 }

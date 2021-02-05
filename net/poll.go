@@ -163,7 +163,7 @@ func processHelloReply(pkt UDPPacket, devices miio.Devices) bool {
 		log.Printf("[DEBUG] hello reply from already discovered %s", d.Name)
 		return false
 	}
-	log.Printf("[DEBUG] hello reply from %s (stage=%s): %s", d.Name, d.GetStage(), reply.Format())
+	log.Printf("[DEBUG] hello reply from %s (stage=%s): %v", d.Name, d.GetStage(), reply)
 	d.SetTimeShift(pkt.TimeStamp, reply.TimeStamp)
 	if updateDID {
 		d.ID = did

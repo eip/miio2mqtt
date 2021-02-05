@@ -2,6 +2,7 @@ package miio
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	h "github.com/eip/miio2mqtt/helpers"
@@ -329,7 +330,7 @@ func TestPacket_CalcChecksum(t *testing.T) {
 	}
 }
 
-func TestPacket_Format(t *testing.T) {
+func TestPacket_String(t *testing.T) {
 	tests := []struct {
 		name   string
 		packet *Packet
@@ -343,23 +344,70 @@ func TestPacket_Format(t *testing.T) {
 		{
 			name:   "Packet with no data",
 			packet: NewPacket(0x00112233, sampleTS, nil),
-			want:   "{deviceID: 00112233, time: 111h22m33s}",
+			want:   `{deviceID:0x00112233,uptime:"111h22m33s"}`,
 		},
 		{
 			name:   "Packet with string data",
+			packet: NewPacket(0x00112233, sampleTS, []byte(`Hello, "World"`)),
+			want:   `{deviceID:0x00112233,uptime:"111h22m33s",data:"Hello, \"World\""}`,
+		},
+		{
+			name:   "Packet with json string data",
 			packet: NewPacket(0x00112233, sampleTS, []byte(`{"id":1,"method":"miIO.info","params":[]}`)),
-			want:   `{deviceID: 00112233, time: 111h22m33s, data: {"id":1,"method":"miIO.info","params":[]}}`,
+			want:   `{deviceID:0x00112233,uptime:"111h22m33s",data:{id:1,method:"miIO.info",params:[]}}`,
 		},
 		{
 			name:   "Packet with binary data",
 			packet: NewPacket(0x00112233, sampleTS, h.FromHex("0102030405060708090a0b0c0d0e0f10")),
-			want:   "{deviceID: 00112233, time: 111h22m33s, data: 0102030405060708090a0b0c0d0e0f10}",
+			want:   `{deviceID:0x00112233,uptime:"111h22m33s",data:"0102030405060708090a0b0c0d0e0f10"}`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.packet.Format()
+			got := tt.packet.String()
 			h.AssertEqual(t, got, tt.want)
+		})
+	}
+}
+
+func TestPacket_Format(t *testing.T) {
+	type want struct {
+		s string
+		v string
+	}
+
+	tests := []struct {
+		name   string
+		packet *Packet
+		want   want
+	}{
+		{
+			name:   "Hello Packet",
+			packet: NewHelloPacket(),
+			want:   want{s: "<Hello Packet>", v: "{Magic:2131 Length:0020 Unused:ffffffff DeviceID:ffffffff TimeStamp:1193046h28m15s Checksum:ffffffffffffffffffffffffffffffff}"},
+		},
+		{
+			name:   "Packet with no data",
+			packet: NewPacket(0x00112233, sampleTS, nil),
+			want:   want{s: `{deviceID:0x00112233,uptime:"111h22m33s"}`, v: "{Magic:2131 Length:0020 Unused:00000000 DeviceID:00112233 TimeStamp:111h22m33s Checksum:00000000000000000000000000000000}"},
+		},
+		{
+			name:   "Packet with string data",
+			packet: NewPacket(0x00112233, sampleTS, []byte(`{"id":1,"method":"miIO.info","params":[]}`)),
+			want:   want{s: `{deviceID:0x00112233,uptime:"111h22m33s",data:{id:1,method:"miIO.info",params:[]}}`, v: `{Magic:2131 Length:0049 Unused:00000000 DeviceID:00112233 TimeStamp:111h22m33s Checksum:00000000000000000000000000000000 Data:{"id":1,"method":"miIO.info","params":[]}}`},
+		},
+		{
+			name:   "Packet with binary data",
+			packet: NewPacket(0x00112233, sampleTS, h.FromHex("0102030405060708090a0b0c0d0e0f10")),
+			want:   want{s: `{deviceID:0x00112233,uptime:"111h22m33s",data:"0102030405060708090a0b0c0d0e0f10"}`, v: "{Magic:2131 Length:0030 Unused:00000000 DeviceID:00112233 TimeStamp:111h22m33s Checksum:00000000000000000000000000000000 Data:0102030405060708090a0b0c0d0e0f10}"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h.AssertEqual(t, fmt.Sprintf("%s", tt.packet), tt.want.s)
+			h.AssertEqual(t, fmt.Sprintf("%q", tt.packet), tt.want.s)
+			h.AssertEqual(t, fmt.Sprintf("%v", tt.packet), tt.want.s)
+			h.AssertEqual(t, fmt.Sprintf("%+v", tt.packet), tt.want.v)
 		})
 	}
 }
@@ -662,6 +710,66 @@ func TestPacket_encrypt(t *testing.T) {
 	}
 }
 
+func TestPacketData_String(t *testing.T) {
+	tests := []struct {
+		name string
+		data PacketData
+		want string
+	}{
+		{name: "nil", data: nil, want: ""},
+		{name: "empty slice", data: nil, want: ""},
+		{name: "string", data: PacketData(`Hello, "World"`), want: `Hello, "World"`},
+		{name: "json string", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), want: `{id:1,method:"miIO.info",params:[]}`},
+		{name: "binary", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), want: "0102030405060708090a0b0c0d0e0f10"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.data.String()
+			h.AssertEqual(t, got, tt.want)
+		})
+	}
+}
+
+func TestPacketData_string(t *testing.T) {
+	type args struct {
+		quotes   bool
+		simplify bool
+	}
+	tests := []struct {
+		name string
+		data PacketData
+		args args
+		want string
+	}{
+		{name: "nil", data: nil, args: args{quotes: false, simplify: false}, want: ""},
+		{name: "nil quoted", data: nil, args: args{quotes: true, simplify: false}, want: "\"\""},
+		{name: "nil simplified", data: nil, args: args{quotes: false, simplify: true}, want: ""},
+		{name: "nil quoted simplified", data: nil, args: args{quotes: true, simplify: true}, want: "\"\""},
+		{name: "empty slice", data: nil, args: args{quotes: false, simplify: false}, want: ""},
+		{name: "empty slice quoted", data: nil, args: args{quotes: true, simplify: false}, want: "\"\""},
+		{name: "empty slice simplified", data: nil, args: args{quotes: false, simplify: true}, want: ""},
+		{name: "empty slice quoted simplified", data: nil, args: args{quotes: true, simplify: true}, want: "\"\""},
+		{name: "string", data: PacketData(`Hello, "World"`), args: args{quotes: false, simplify: false}, want: `Hello, "World"`},
+		{name: "string quoted", data: PacketData(`Hello, "World"`), args: args{quotes: true, simplify: false}, want: `"Hello, \"World\""`},
+		{name: "string simplified", data: PacketData(`Hello, "World"`), args: args{quotes: false, simplify: true}, want: `Hello, "World"`},
+		{name: "string quoted simplified", data: PacketData(`Hello, "World"`), args: args{quotes: true, simplify: true}, want: `"Hello, \"World\""`},
+		{name: "json string", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: false, simplify: false}, want: `{"id":1,"method":"miIO.info","params":[]}`},
+		{name: "json string quoted", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: true, simplify: false}, want: `{"id":1,"method":"miIO.info","params":[]}`},
+		{name: "json string simplified", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: false, simplify: true}, want: `{id:1,method:"miIO.info",params:[]}`},
+		{name: "json string quoted simplified", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: true, simplify: true}, want: `{id:1,method:"miIO.info",params:[]}`},
+		{name: "binary", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), args: args{quotes: false, simplify: false}, want: "0102030405060708090a0b0c0d0e0f10"},
+		{name: "binary quoted", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), args: args{quotes: true, simplify: false}, want: "\"0102030405060708090a0b0c0d0e0f10\""},
+		{name: "binary simplified", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), args: args{quotes: false, simplify: true}, want: "0102030405060708090a0b0c0d0e0f10"},
+		{name: "binary quoted simplified", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), args: args{quotes: true, simplify: true}, want: "\"0102030405060708090a0b0c0d0e0f10\""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.data.string(tt.args.quotes, tt.args.simplify)
+			h.AssertEqual(t, got, tt.want)
+		})
+	}
+}
+
 func Test_dataLen(t *testing.T) {
 	tests := []struct {
 		name string
@@ -858,4 +966,82 @@ func packetFromHex(s string) *Packet {
 		return nil
 	}
 	return p
+}
+
+func Test_isJSON(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  []byte
+		want bool
+	}{
+		{name: "nil", arg: nil, want: false},
+		{name: "empty slice", arg: []byte{}, want: false},
+		{name: "not JSON string 1", arg: []byte(`Hello, "World"`), want: false},
+		{name: "not JSON string 2", arg: []byte(`{Hello, "World"}`), want: false},
+		{name: "not JSON string 3", arg: []byte(`{Hello: "World"}`), want: false},
+		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: true},
+		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: true},
+		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isJSON(tt.arg)
+			h.AssertEqual(t, got, tt.want)
+		})
+	}
+}
+
+func Test_stripJSONQuotes(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  []byte
+		want []byte
+	}{
+		{name: "nil", arg: nil, want: nil},
+		{name: "empty slice", arg: []byte{}, want: nil},
+		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: []byte(`{method:"get_prop",params:["power","usb_state","aqi","battery"],id:2}`)},
+		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: []byte(`{RESULT:["on","on",20,100],ID:2}`)},
+		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: []byte(`{fw_ver:"1.4.3_8103",hw_ver:"MW300"}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripJSONQuotes(tt.arg)
+			h.AssertEqual(t, got, tt.want)
+		})
+	}
+
+}
+
+func Test_FailDecode(t *testing.T) {
+	tests := []struct {
+		name  string
+		data  []byte
+		token []byte
+		want  *Packet
+		err   error
+	}{
+		// {
+		// 	name: "Fail Hello Packet",
+		// 	data: h.FromHex("21310020ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		// 	want: NewHelloPacket(),
+		// },
+		{
+			name:  "Fail Real Packet",
+			data:  h.FromHex("2131005000000000047bd1b5002feedece53f7b9e63ae50c3fc22fac87cc3ee7053510f79d4e36f4ff504d8da4391c467b067c3d5a777aca3ed402f9009821176bc6bffeb40994d5e6889e48836d54a6"),
+			token: h.FromHex("9c3b2d1da5beceee2808a3d3653b485d"),
+			want:  NewPacket(0x047bd1b5, 0x002feede, []byte(`{"xresult":["on","on",4,100,"off","on"],"id":1}`)),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Decode(tt.data, tt.token)
+			h.AssertError(t, err, tt.err)
+			h.AssertEqual(t, got, tt.want)
+			// fmt.Printf("%%s:  %s\n", got)
+			// fmt.Printf("%%q:  %q\n", got)
+			// fmt.Printf("%%v:  %v\n", got)
+			// fmt.Printf("%%+v: %+v\n", got)
+			// fmt.Printf("%%#v: %#v\n", got)
+		})
+	}
 }
