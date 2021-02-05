@@ -57,6 +57,12 @@ func formatValue(value interface{}) string {
 			return fmt.Sprintf("%#v", value)
 		}
 	}
+	switch value := value.(type) {
+	case fmt.Stringer:
+		return value.String()
+	case fmt.Formatter:
+		return fmt.Sprint(value)
+	}
 	if k == reflect.Ptr {
 		v = v.Elem()
 		k = v.Kind()
