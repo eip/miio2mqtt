@@ -6,6 +6,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/eip/miio2mqtt/config"
+	h "github.com/eip/miio2mqtt/helpers"
 	"github.com/eip/miio2mqtt/miio"
 	log "github.com/go-pkgz/lgr"
 )
@@ -51,7 +52,7 @@ func (c *Client) Publish(device *miio.Device) error {
 		return token.Error()
 	}
 	device.SetStatePublishedNow()
-	log.Printf("[DEBUG] publish to %s: %s", device.Topic, device.Properties)
+	log.Printf("[DEBUG] publish to %s: %s", device.Topic, h.StripJSONQuotes([]byte(device.Properties)))
 	return nil
 }
 
