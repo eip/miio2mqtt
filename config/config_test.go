@@ -40,7 +40,7 @@ func Test_New(t *testing.T) {
 func Test_Config_parse(t *testing.T) {
 	tests := []struct {
 		name string
-		data []byte
+		arg  []byte
 		want *Config
 		err  error
 	}{
@@ -50,7 +50,7 @@ func Test_Config_parse(t *testing.T) {
 		},
 		{
 			name: "Sample",
-			data: []byte(`PollInterval: 10s
+			arg: []byte(`PollInterval: 10s
 PollAheadTime: 50ms
 PollTimeout: 5s
 PushTimeout: 4s
@@ -103,13 +103,13 @@ Properties:
 		},
 		{
 			name: "Invalid 1",
-			data: []byte(`PollInterval: foo`),
+			arg:  []byte(`PollInterval: foo`),
 			want: New(),
 			err:  errors.New("yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `foo` into time.Duration"),
 		},
 		{
 			name: "Invalid 2",
-			data: []byte(`Not a yaml data`),
+			arg:  []byte(`Not a yaml data`),
 			want: New(),
 			err:  errors.New("yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `Not a y...` into config.Config"),
 		},
@@ -117,7 +117,7 @@ Properties:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := New()
-			err := config.parse(tt.data)
+			err := config.parse(tt.arg)
 			h.AssertError(t, err, tt.err)
 			h.AssertEqual(t, config, tt.want)
 		})
@@ -142,6 +142,64 @@ func Test_Config_validate(t *testing.T) {
 			err := tt.config.validate()
 			h.AssertError(t, err, tt.err)
 			h.AssertEqual(t, tt.config, tt.want)
+		})
+	}
+}
+
+func TestLoad(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  string
+		want *Config
+		err  error
+	}{
+		{
+			name: "Empty path",
+			arg:  "",
+			want: New(),
+			err:  errors.New("empty configuration file path"),
+		},
+		{
+			name: "Empty path",
+			arg:  "../config_sample.yml",
+			want: &Config{
+				PollInterval:  10 * time.Second,
+				PollAheadTime: 100 * time.Millisecond,
+				PollTimeout:   4 * time.Second,
+				PushTimeout:   4 * time.Second,
+				Mqtt:          MqttOptions{BrokerURL: "tcp://localhost:1883"},
+				MiioPort:      defaultMiioPort,
+				Models: miio.Models{
+					"*":                   miio.DefaultModel(),
+					"yeelink.light.lamp2": miio.Model{Params: []string{"power", "bright", "ct", "color_mode"}},
+					"zhimi.airmonitor.v1": miio.Model{Params: []string{"power", "usb_state", "aqi", "battery"}},
+				},
+				Devices: map[string]miio.DeviceCfg{
+					"AirMonitor": {
+						ID:    0x11223301,
+						Topic: "home/livingroom/airmonitor",
+						Token: "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+					},
+					"DeskLamp": {
+						Address: "192.168.0.11",
+						Topic:   "home/livingroom/desklamp",
+						Token:   "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+					},
+				},
+				Properties: map[interface{}]interface{}{
+					"off": 0,
+					"on":  1,
+				},
+				Debug: false,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			C = nil
+			err := Load(tt.arg)
+			h.AssertError(t, err, tt.err)
+			h.AssertEqual(t, C, tt.want)
 		})
 	}
 }
