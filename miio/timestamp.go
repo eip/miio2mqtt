@@ -28,11 +28,3 @@ func TimeStampDiff(t1, t2 TimeStamp) TimeStamp {
 	}
 	return t2 - t1
 }
-
-func TimeDiff(t1, t2 time.Time) time.Duration {
-	diff := t1.Sub(t2)
-	if diff < 0 {
-		diff = -diff
-	}
-	return time.Duration(diff)
-}

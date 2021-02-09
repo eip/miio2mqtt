@@ -146,37 +146,3 @@ func Test_TimeStampDiff(t *testing.T) {
 		})
 	}
 }
-
-func Test_TimeDiff(t *testing.T) {
-	tests := []struct {
-		name string
-		t1   time.Time
-		t2   time.Time
-		want time.Duration
-	}{
-		{
-			name: "Same time",
-			t1:   time.Unix(0, 1609495835215478931),
-			t2:   time.Unix(0, 1609495835215478931),
-			want: time.Duration(0),
-		},
-		{
-			name: "First time before secont",
-			t1:   time.Unix(0, 1609495824215478931),
-			t2:   time.Unix(0, 1609495835215478931),
-			want: time.Second * 11,
-		},
-		{
-			name: "First time after secont",
-			t1:   time.Unix(0, 1609495835215478931),
-			t2:   time.Unix(0, 1609495824215478931),
-			want: time.Second * 11,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := TimeDiff(tt.t1, tt.t2)
-			h.AssertEqual(t, got, tt.want)
-		})
-	}
-}
