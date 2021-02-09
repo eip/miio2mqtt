@@ -59,9 +59,9 @@ func run(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	messages := make(chan mqtt.Message, 100)
+	updates := make(chan *miio.Device, 2*len(devices))
 	wg.Add(1)
-	go func() { defer wg.Done(); processMessages(ctx, messages) }()
+	go func() { defer wg.Done(); publishUpdates(ctx, updates) }()
 
 	deviceUpdateTimeout := 2 * miio.TimeStamp(config.C.PollInterval/time.Second)
 	for {
@@ -86,7 +86,7 @@ func run(ctx context.Context) error {
 			log.Printf("[WARN] unable to listen for UDP packets: %v", err)
 			continue
 		}
-		err = net.PollDevices(ctx, listener, devices, messages)
+		err = net.PollDevices(ctx, listener, devices, updates)
 		listener.Stop()
 		if err != nil {
 			log.Printf("[WARN] unable to update all devices: %v", err)
@@ -126,7 +126,7 @@ func initDevices() {
 	}
 }
 
-func processMessages(ctx context.Context, messages <-chan mqtt.Message) {
+func publishUpdates(ctx context.Context, updates <-chan *miio.Device) {
 	client := mqtt.NewClient()
 	defer client.Disconnect()
 	for {
@@ -134,8 +134,8 @@ func processMessages(ctx context.Context, messages <-chan mqtt.Message) {
 		case <-ctx.Done():
 			log.Print("[DEBUG] stop processing mqtt messages")
 			return
-		case msg := <-messages:
-			if err := client.Publish(msg); err != nil {
+		case device := <-updates:
+			if err := client.Publish(device); err != nil {
 				log.Printf("[WARN] unable to publish to MQTT broker: %v", err)
 			}
 		}

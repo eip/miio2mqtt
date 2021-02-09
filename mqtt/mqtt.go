@@ -10,10 +10,6 @@ import (
 	log "github.com/go-pkgz/lgr"
 )
 
-type Message struct {
-	Device *miio.Device
-}
-
 type Client struct {
 	mqtt mqtt.Client
 }
@@ -47,15 +43,15 @@ func (c *Client) Disconnect() {
 	log.Printf("[DEBUG] disconnected from %v", config.C.Mqtt.BrokerURL)
 }
 
-func (c *Client) Publish(message Message) error {
+func (c *Client) Publish(device *miio.Device) error {
 	if err := c.Connect(); err != nil {
 		return err
 	}
-	if token := c.mqtt.Publish(message.Device.Topic, 0, true, message.Device.Properties); token.Wait() && token.Error() != nil {
+	if token := c.mqtt.Publish(device.Topic, 0, true, device.Properties); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
-	message.Device.SetStatePublishedNow()
-	log.Printf("[DEBUG] publish to %s: %s", message.Device.Topic, message.Device.Properties)
+	device.SetStatePublishedNow()
+	log.Printf("[DEBUG] publish to %s: %s", device.Topic, device.Properties)
 	return nil
 }
 

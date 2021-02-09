@@ -9,12 +9,11 @@ import (
 	"github.com/eip/miio2mqtt/config"
 	h "github.com/eip/miio2mqtt/helpers"
 	"github.com/eip/miio2mqtt/miio"
-	"github.com/eip/miio2mqtt/mqtt"
 	log "github.com/go-pkgz/lgr"
 )
 
 // PollDevices queries devices and updates devices info
-func PollDevices(ctx context.Context, listener *UDPListener, devices miio.Devices, messages chan<- mqtt.Message) error {
+func PollDevices(ctx context.Context, listener *UDPListener, devices miio.Devices, updates chan<- *miio.Device) error {
 	left := devices.Count(miio.DeviceNeedsUpdate)
 	if left == 0 {
 		log.Print("[INFO] no device to update")
@@ -42,7 +41,7 @@ loop:
 			processHelloReply(pkt, devices)
 			continue
 		}
-		if ok := processReply(pkt, devices, messages); !ok {
+		if ok := processReply(pkt, devices, updates); !ok {
 			continue
 		}
 		left--
@@ -177,8 +176,7 @@ func processHelloReply(pkt UDPPacket, devices miio.Devices) bool {
 	log.Printf("[INFO] discovered %s: %08x (%s)", d.Name, d.ID, d.Address)
 	return true
 }
-
-func processReply(pkt UDPPacket, devices miio.Devices, messages chan<- mqtt.Message) bool {
+func processReply(pkt UDPPacket, devices miio.Devices, updates chan<- *miio.Device) bool {
 	did, _, saddr, err := getDeviceIDAndAddress(pkt)
 	if err != nil {
 		log.Printf("[WARN] invalid packet received from %s: %x (%v)", saddr, pkt.Data, err)
@@ -199,13 +197,6 @@ func processReply(pkt UDPPacket, devices miio.Devices, messages chan<- mqtt.Mess
 		return false
 	}
 	log.Printf("[DEBUG] reply from %s (stage=%s): %s", d.Name, d.GetStage(), reply.Data)
-
-	// replyTS := int64(reply.Stamp) * 1e9
-	// deviceTS, _ := d.GetTimeStamp(pkt.Time)
-	// deviceTS = deviceTS / 1e6 * 1e6
-	// if h.TimeStampDiff(replyTS, deviceTS) > time.Millisecond {
-	// 	log.Printf("[INFO] last reply time %v not in sync with device time %v [%v]", time.Duration(replyTS), time.Duration(deviceTS), time.Duration(replyTS-deviceTS))
-	// }
 
 	parsed := miio.ParseReply(reply.Data)
 	switch parsed.Type {
@@ -249,7 +240,7 @@ func processReply(pkt UDPPacket, devices miio.Devices, messages chan<- mqtt.Mess
 		d.SetUpdatedNow()
 		d.SetStage(miio.Updated)
 		if d.StateChangeUnpublished() {
-			messages <- mqtt.Message{Device: d}
+			updates <- d
 		}
 		return true
 	default:
