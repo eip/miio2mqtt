@@ -71,6 +71,49 @@ func Test_IsPrintableASCII(t *testing.T) {
 	}
 }
 
+func Test_IsJSON(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  []byte
+		want bool
+	}{
+		{name: "nil", arg: nil, want: false},
+		{name: "empty slice", arg: []byte{}, want: false},
+		{name: "not JSON string 1", arg: []byte(`Hello, "World"`), want: false},
+		{name: "not JSON string 2", arg: []byte(`{Hello, "World"}`), want: false},
+		{name: "not JSON string 3", arg: []byte(`{Hello: "World"}`), want: false},
+		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: true},
+		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: true},
+		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsJSON(tt.arg)
+			AssertEqual(t, got, tt.want)
+		})
+	}
+}
+
+func Test_StripJSONQuotes(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  []byte
+		want []byte
+	}{
+		{name: "nil", arg: nil, want: nil},
+		{name: "empty slice", arg: []byte{}, want: nil},
+		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: []byte(`{method:"get_prop",params:["power","usb_state","aqi","battery"],id:2}`)},
+		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: []byte(`{RESULT:["on","on",20,100],ID:2}`)},
+		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: []byte(`{fw_ver:"1.4.3_8103",hw_ver:"MW300"}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := StripJSONQuotes(tt.arg)
+			AssertEqual(t, got, tt.want)
+		})
+	}
+}
+
 func TestTestLog_Write(t *testing.T) {
 	type spy struct {
 		message string

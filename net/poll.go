@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/eip/miio2mqtt/config"
+	h "github.com/eip/miio2mqtt/helpers"
 	"github.com/eip/miio2mqtt/miio"
 	"github.com/eip/miio2mqtt/mqtt"
 	log "github.com/go-pkgz/lgr"
@@ -240,7 +241,7 @@ func processReply(pkt UDPPacket, devices miio.Devices, messages chan<- mqtt.Mess
 		if stateChanged {
 			d.Properties = string(props)
 			d.SetStateChangedNow()
-			log.Printf("[INFO] updated %s: %s", d.Name, d.Properties)
+			log.Printf("[INFO] updated %s: %s", d.Name, h.StripJSONQuotes(props))
 		} else {
 			log.Printf("[INFO] %s state unchanged", d.Name)
 		}

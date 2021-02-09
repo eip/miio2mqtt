@@ -713,13 +713,13 @@ func TestPacket_encrypt(t *testing.T) {
 func TestPacketData_String(t *testing.T) {
 	tests := []struct {
 		name string
-		data PacketData
+		data Payload
 		want string
 	}{
 		{name: "nil", data: nil, want: ""},
 		{name: "empty slice", data: nil, want: ""},
-		{name: "string", data: PacketData(`Hello, "World"`), want: `Hello, "World"`},
-		{name: "json string", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), want: `{id:1,method:"miIO.info",params:[]}`},
+		{name: "string", data: Payload(`Hello, "World"`), want: `Hello, "World"`},
+		{name: "json string", data: Payload(`{"id":1,"method":"miIO.info","params":[]}`), want: `{id:1,method:"miIO.info",params:[]}`},
 		{name: "binary", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), want: "0102030405060708090a0b0c0d0e0f10"},
 	}
 	for _, tt := range tests {
@@ -737,7 +737,7 @@ func TestPacketData_string(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		data PacketData
+		data Payload
 		args args
 		want string
 	}{
@@ -749,14 +749,14 @@ func TestPacketData_string(t *testing.T) {
 		{name: "empty slice quoted", data: nil, args: args{quotes: true, simplify: false}, want: "\"\""},
 		{name: "empty slice simplified", data: nil, args: args{quotes: false, simplify: true}, want: ""},
 		{name: "empty slice quoted simplified", data: nil, args: args{quotes: true, simplify: true}, want: "\"\""},
-		{name: "string", data: PacketData(`Hello, "World"`), args: args{quotes: false, simplify: false}, want: `Hello, "World"`},
-		{name: "string quoted", data: PacketData(`Hello, "World"`), args: args{quotes: true, simplify: false}, want: `"Hello, \"World\""`},
-		{name: "string simplified", data: PacketData(`Hello, "World"`), args: args{quotes: false, simplify: true}, want: `Hello, "World"`},
-		{name: "string quoted simplified", data: PacketData(`Hello, "World"`), args: args{quotes: true, simplify: true}, want: `"Hello, \"World\""`},
-		{name: "json string", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: false, simplify: false}, want: `{"id":1,"method":"miIO.info","params":[]}`},
-		{name: "json string quoted", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: true, simplify: false}, want: `{"id":1,"method":"miIO.info","params":[]}`},
-		{name: "json string simplified", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: false, simplify: true}, want: `{id:1,method:"miIO.info",params:[]}`},
-		{name: "json string quoted simplified", data: PacketData(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: true, simplify: true}, want: `{id:1,method:"miIO.info",params:[]}`},
+		{name: "string", data: Payload(`Hello, "World"`), args: args{quotes: false, simplify: false}, want: `Hello, "World"`},
+		{name: "string quoted", data: Payload(`Hello, "World"`), args: args{quotes: true, simplify: false}, want: `"Hello, \"World\""`},
+		{name: "string simplified", data: Payload(`Hello, "World"`), args: args{quotes: false, simplify: true}, want: `Hello, "World"`},
+		{name: "string quoted simplified", data: Payload(`Hello, "World"`), args: args{quotes: true, simplify: true}, want: `"Hello, \"World\""`},
+		{name: "json string", data: Payload(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: false, simplify: false}, want: `{"id":1,"method":"miIO.info","params":[]}`},
+		{name: "json string quoted", data: Payload(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: true, simplify: false}, want: `{"id":1,"method":"miIO.info","params":[]}`},
+		{name: "json string simplified", data: Payload(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: false, simplify: true}, want: `{id:1,method:"miIO.info",params:[]}`},
+		{name: "json string quoted simplified", data: Payload(`{"id":1,"method":"miIO.info","params":[]}`), args: args{quotes: true, simplify: true}, want: `{id:1,method:"miIO.info",params:[]}`},
 		{name: "binary", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), args: args{quotes: false, simplify: false}, want: "0102030405060708090a0b0c0d0e0f10"},
 		{name: "binary quoted", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), args: args{quotes: true, simplify: false}, want: "\"0102030405060708090a0b0c0d0e0f10\""},
 		{name: "binary simplified", data: h.FromHex("0102030405060708090a0b0c0d0e0f10"), args: args{quotes: false, simplify: true}, want: "0102030405060708090a0b0c0d0e0f10"},
@@ -966,50 +966,6 @@ func packetFromHex(s string) *Packet {
 		return nil
 	}
 	return p
-}
-
-func Test_isJSON(t *testing.T) {
-	tests := []struct {
-		name string
-		arg  []byte
-		want bool
-	}{
-		{name: "nil", arg: nil, want: false},
-		{name: "empty slice", arg: []byte{}, want: false},
-		{name: "not JSON string 1", arg: []byte(`Hello, "World"`), want: false},
-		{name: "not JSON string 2", arg: []byte(`{Hello, "World"}`), want: false},
-		{name: "not JSON string 3", arg: []byte(`{Hello: "World"}`), want: false},
-		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: true},
-		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: true},
-		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isJSON(tt.arg)
-			h.AssertEqual(t, got, tt.want)
-		})
-	}
-}
-
-func Test_stripJSONQuotes(t *testing.T) {
-	tests := []struct {
-		name string
-		arg  []byte
-		want []byte
-	}{
-		{name: "nil", arg: nil, want: nil},
-		{name: "empty slice", arg: []byte{}, want: nil},
-		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: []byte(`{method:"get_prop",params:["power","usb_state","aqi","battery"],id:2}`)},
-		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: []byte(`{RESULT:["on","on",20,100],ID:2}`)},
-		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: []byte(`{fw_ver:"1.4.3_8103",hw_ver:"MW300"}`)},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := stripJSONQuotes(tt.arg)
-			h.AssertEqual(t, got, tt.want)
-		})
-	}
-
 }
 
 func Test_FailDecode(t *testing.T) {

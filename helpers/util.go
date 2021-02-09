@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"encoding/hex"
+	"regexp"
 
 	log "github.com/go-pkgz/lgr"
 )
@@ -51,4 +52,15 @@ func IsPrintableASCII(b []byte) bool {
 		}
 	}
 	return true
+}
+
+var reIsJSON = regexp.MustCompile(`(?i)^{\s*"[a-z_]+":.+}$`)
+var reJSONKey = regexp.MustCompile(`(?i)"([a-z_]+)":`)
+
+func IsJSON(data []byte) bool {
+	return reIsJSON.Match(data)
+}
+
+func StripJSONQuotes(data []byte) []byte {
+	return reJSONKey.ReplaceAll(data, []byte("$1:"))
 }

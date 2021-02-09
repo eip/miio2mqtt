@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"regexp"
 
 	h "github.com/eip/miio2mqtt/helpers"
 )
@@ -21,11 +20,11 @@ type Packet struct {
 	DeviceID  uint32
 	TimeStamp TimeStamp
 	Checksum  [16]byte
-	Data      PacketData
+	Data      Payload
 }
 
-// PacketData represents a Packet data field
-type PacketData []byte
+// Payload represents a Packet data field
+type Payload []byte
 
 var errInvalidMagicField = errors.New("invalid magic field")
 var errInvalidDataLength = errors.New("invalid data length")
@@ -34,9 +33,6 @@ var errInvalidChecksum = errors.New("invalid checksum")
 var errInvalidChecksumLength = errors.New("invalid checksum length")
 var errInvalidBlockSize = errors.New("invalid block size")
 var errInvalidPadding = errors.New("invalid padding")
-
-var reIsJSON = regexp.MustCompile(`(?i)^{\s*"[a-z_]+":.+}$`)
-var reJSONKey = regexp.MustCompile(`(?i)"([a-z_]+)":`)
 
 // NewHelloPacket creates a Hello packet
 func NewHelloPacket() *Packet {
@@ -277,11 +273,11 @@ func (p *Packet) encrypt(token []byte) (*Packet, error) {
 	return &result, nil
 }
 
-func (d PacketData) String() string {
+func (d Payload) String() string {
 	return d.string(false, true)
 }
 
-func (d PacketData) string(quotes, simplify bool) string {
+func (d Payload) string(quotes, simplify bool) string {
 	if d == nil || len(d) == 0 {
 		if quotes {
 			return "\"\""
@@ -294,9 +290,9 @@ func (d PacketData) string(quotes, simplify bool) string {
 		}
 		return fmt.Sprintf("%x", []byte(d))
 	}
-	if isJSON(d) {
+	if h.IsJSON(d) {
 		if simplify {
-			return string(stripJSONQuotes(d))
+			return string(h.StripJSONQuotes(d))
 		}
 		return string(d)
 	}
@@ -347,12 +343,4 @@ func pkcs7strip(data []byte, blockSize int) ([]byte, error) {
 		return nil, errInvalidPadding
 	}
 	return data[:length-padLen], nil
-}
-
-func isJSON(data []byte) bool {
-	return reIsJSON.Match(data)
-}
-
-func stripJSONQuotes(data []byte) []byte {
-	return reJSONKey.ReplaceAll(data, []byte("$1:"))
 }
