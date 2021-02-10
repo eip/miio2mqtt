@@ -74,17 +74,16 @@ func Test_IsPrintableASCII(t *testing.T) {
 func Test_IsJSON(t *testing.T) {
 	tests := []struct {
 		name string
-		arg  []byte
+		arg  string
 		want bool
 	}{
-		{name: "nil", arg: nil, want: false},
-		{name: "empty slice", arg: []byte{}, want: false},
-		{name: "not JSON string 1", arg: []byte(`Hello, "World"`), want: false},
-		{name: "not JSON string 2", arg: []byte(`{Hello, "World"}`), want: false},
-		{name: "not JSON string 3", arg: []byte(`{Hello: "World"}`), want: false},
-		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: true},
-		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: true},
-		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: true},
+		{name: "empty string", arg: "", want: false},
+		{name: "not JSON string 1", arg: `Hello, "World"`, want: false},
+		{name: "not JSON string 2", arg: `{Hello, "World"}`, want: false},
+		{name: "not JSON string 3", arg: `{Hello: "World"}`, want: false},
+		{name: "JSON string 1", arg: `{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`, want: true},
+		{name: "JSON string 2", arg: `{"RESULT":["on","on",20,100],"ID":2}`, want: true},
+		{name: "JSON string 3", arg: `{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -97,14 +96,13 @@ func Test_IsJSON(t *testing.T) {
 func Test_StripJSONQuotes(t *testing.T) {
 	tests := []struct {
 		name string
-		arg  []byte
-		want []byte
+		arg  string
+		want string
 	}{
-		{name: "nil", arg: nil, want: nil},
-		{name: "empty slice", arg: []byte{}, want: nil},
-		{name: "JSON string 1", arg: []byte(`{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`), want: []byte(`{method:"get_prop",params:["power","usb_state","aqi","battery"],id:2}`)},
-		{name: "JSON string 2", arg: []byte(`{"RESULT":["on","on",20,100],"ID":2}`), want: []byte(`{RESULT:["on","on",20,100],ID:2}`)},
-		{name: "JSON string 3", arg: []byte(`{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`), want: []byte(`{fw_ver:"1.4.3_8103",hw_ver:"MW300"}`)},
+		{name: "empty string", arg: "", want: ""},
+		{name: "JSON string 1", arg: `{"method":"get_prop","params":["power","usb_state","aqi","battery"],"id":2}`, want: `{method:"get_prop",params:["power","usb_state","aqi","battery"],id:2}`},
+		{name: "JSON string 2", arg: `{"RESULT":["on","on",20,100],"ID":2}`, want: `{RESULT:["on","on",20,100],ID:2}`},
+		{name: "JSON string 3", arg: `{"fw_ver":"1.4.3_8103","hw_ver":"MW300"}`, want: `{fw_ver:"1.4.3_8103",hw_ver:"MW300"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

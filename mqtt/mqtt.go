@@ -52,7 +52,7 @@ func (c *Client) Publish(device *miio.Device) error {
 		return token.Error()
 	}
 	device.SetStatePublishedNow()
-	log.Printf("[DEBUG] publish to %s: %s", device.Topic, h.StripJSONQuotes([]byte(device.Properties)))
+	log.Printf("[DEBUG] publish to %s: %s", device.Topic, h.StripJSONQuotes(device.Properties))
 	return nil
 }
 

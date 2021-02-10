@@ -231,9 +231,16 @@ func processReply(pkt UDPPacket, devices miio.Devices, updates chan<- *miio.Devi
 		}
 		stateChanged := string(props) != d.Properties
 		if stateChanged {
-			d.Properties = string(props)
+			oldProps := d.Properties
+			newProps := string(props)
+			d.Properties = newProps
 			d.SetStateChangedNow()
-			log.Printf("[INFO] updated %s: %s", d.Name, h.StripJSONQuotes(props))
+			if len(oldProps) > 0 {
+				newProps = h.DiffStrings(h.StripJSONQuotes(oldProps), h.StripJSONQuotes(newProps), "96")
+			} else {
+				newProps = h.StripJSONQuotes(newProps)
+			}
+			log.Printf("[INFO] updated %s: %s", d.Name, newProps)
 		} else {
 			log.Printf("[INFO] %s state unchanged", d.Name)
 		}

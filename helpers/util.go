@@ -1,10 +1,12 @@
 package helpers
 
 import (
+	"bytes"
 	"encoding/hex"
 	"regexp"
 
 	log "github.com/go-pkgz/lgr"
+	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
 type TestLog struct {
@@ -57,10 +59,29 @@ func IsPrintableASCII(b []byte) bool {
 var reIsJSON = regexp.MustCompile(`(?i)^{\s*"[a-z_]+":.+}$`)
 var reJSONKey = regexp.MustCompile(`(?i)"([a-z_]+)":`)
 
-func IsJSON(data []byte) bool {
-	return reIsJSON.Match(data)
+func IsJSON(data string) bool {
+	return reIsJSON.MatchString(data)
 }
 
-func StripJSONQuotes(data []byte) []byte {
-	return reJSONKey.ReplaceAll(data, []byte("$1:"))
+func StripJSONQuotes(data string) string {
+	return reJSONKey.ReplaceAllString(data, "$1:")
+}
+
+func DiffStrings(old, new, color string) string {
+	dmp := diffmatchpatch.New()
+	diffs := dmp.DiffMain(old, new, false)
+	return diffPretty(diffs, color)
+}
+
+func diffPretty(diffs []diffmatchpatch.Diff, color string) string {
+	var buff bytes.Buffer
+	for _, diff := range diffs {
+		switch diff.Type {
+		case diffmatchpatch.DiffInsert:
+			_, _ = buff.WriteString("\x1b[" + color + "m" + diff.Text + "\x1b[0m")
+		case diffmatchpatch.DiffEqual:
+			_, _ = buff.WriteString(diff.Text)
+		}
+	}
+	return buff.String()
 }

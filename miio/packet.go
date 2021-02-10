@@ -290,9 +290,9 @@ func (d Payload) string(quotes, simplify bool) string {
 		}
 		return fmt.Sprintf("%x", []byte(d))
 	}
-	if h.IsJSON(d) {
+	if h.IsJSON(string(d)) {
 		if simplify {
-			return string(h.StripJSONQuotes(d))
+			return string(h.StripJSONQuotes(string(d)))
 		}
 		return string(d)
 	}
