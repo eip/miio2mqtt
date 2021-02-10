@@ -176,6 +176,7 @@ func processHelloReply(pkt UDPPacket, devices miio.Devices) bool {
 	log.Printf("[INFO] discovered %s: %08x (%s)", d.Name, d.ID, d.Address)
 	return true
 }
+
 func processReply(pkt UDPPacket, devices miio.Devices, updates chan<- *miio.Device) bool {
 	did, _, saddr, err := getDeviceIDAndAddress(pkt)
 	if err != nil {
@@ -216,7 +217,7 @@ func processReply(pkt UDPPacket, devices miio.Devices, updates chan<- *miio.Devi
 		}
 		params := config.C.Models.Params(d.Model)
 		if len(parsed.Props) != len(params) {
-			log.Printf("[WARN] invalid number of propertiies (%d of %d) for %s (%s)", len(parsed.Props), len(params), d.Name, d.Model)
+			log.Printf("[WARN] invalid number of properties (%d of %d) for %s (%s)", len(parsed.Props), len(params), d.Name, d.Model)
 			return false
 		}
 		data := map[string]interface{}{}
