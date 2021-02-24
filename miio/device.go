@@ -1,10 +1,11 @@
 package miio
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
-	"sync/atomic"
+	"sync"
 
 	log "github.com/go-pkgz/lgr"
 )
@@ -45,13 +46,15 @@ const (
 
 // Device represents a miIO all device properties
 type Device struct {
+	sync.Mutex
 	DeviceCfg
 	Name             string
-	Model            string
-	Token            [16]byte
-	Properties       string
-	timeShift        uint32
+	model            string
+	token            [16]byte
+	properties       string
+	timeShift        TimeStamp
 	stage            DeviceStage
+	finalStage       DeviceStage
 	requestID        uint32
 	updatedAt        TimeStamp
 	stateChangedAt   TimeStamp
@@ -62,12 +65,27 @@ type Devices map[uint32]*Device
 
 type CheckDevice func(d *Device) bool
 
+func NewDevice(cfg DeviceCfg, name string) *Device {
+	d := Device{
+		DeviceCfg: cfg,
+		Name:      name,
+	}
+	token, _ := hex.DecodeString(cfg.Token)
+	copy(d.token[:], token)
+	d.SetStage(Undiscovered)
+	d.SetFinalStage(Updated)
+	return &d
+}
+
 func (d *Device) Request(data []byte) (*Packet, []byte, error) {
 	timeStamp, err := d.Now()
 	if err != nil {
 		return nil, nil, err
 	}
-	return deviceRequest(data, d.ID, atomic.AddUint32(&d.requestID, 1), timeStamp, d.Token[:])
+	d.Lock()
+	defer d.Unlock()
+	d.requestID++
+	return deviceRequest(data, d.ID, d.requestID, timeStamp, d.token[:])
 }
 
 func deviceRequest(data []byte, deviceID uint32, requestID uint32, timeStamp TimeStamp, token []byte) (*Packet, []byte, error) {
@@ -79,28 +97,93 @@ func deviceRequest(data []byte, deviceID uint32, requestID uint32, timeStamp Tim
 	return pkt, raw, nil
 }
 
-func (d *Device) GetStage() DeviceStage {
-	result := atomic.LoadInt32((*int32)(&d.stage))
-	return DeviceStage(result)
+func (d *Device) Model() string {
+	d.Lock()
+	defer d.Unlock()
+	return d.model
+}
+
+func (d *Device) SetModel(model string) {
+	d.Lock()
+	d.model = model
+	d.Unlock()
+}
+
+func (d *Device) Token() []byte {
+	d.Lock()
+	defer d.Unlock()
+	return d.token[:]
+}
+
+func (d *Device) Properties() string {
+	d.Lock()
+	defer d.Unlock()
+	return d.properties
+}
+
+func (d *Device) SetProperties(properties string) {
+	d.Lock()
+	d.properties = properties
+	d.Unlock()
+}
+
+func (d *Device) Stage() DeviceStage {
+	d.Lock()
+	defer d.Unlock()
+	return d.stage
 }
 
 func (d *Device) SetStage(stage DeviceStage) {
 	if stage < Undiscovered || stage > Updated {
 		stage = Undiscovered
 	}
-	atomic.StoreInt32((*int32)(&d.stage), int32(stage))
+	d.Lock()
+	d.stage = stage
+	d.Unlock()
 }
 
-func (d *Device) GetTimeStamp(now TimeStamp) (TimeStamp, error) {
-	ts := atomic.LoadUint32(&d.timeShift)
+func (d *Device) FinalStage() DeviceStage {
+	d.Lock()
+	defer d.Unlock()
+	return d.finalStage
+}
+
+func (d *Device) SetFinalStage(stage DeviceStage) {
+	if stage < Undiscovered || stage > Updated {
+		stage = Undiscovered
+	}
+	d.Lock()
+	d.finalStage = stage
+	d.Unlock()
+}
+
+func (d *Device) InStage(stage DeviceStage) bool {
+	d.Lock()
+	defer d.Unlock()
+	return d.stage >= stage
+}
+
+func (d *Device) InFinalStage() bool {
+	d.Lock()
+	defer d.Unlock()
+	return d.stage >= d.finalStage
+}
+
+func (d *Device) TimeStamp(now TimeStamp) (TimeStamp, error) {
+	d.Lock()
+	ts := d.timeShift
+	d.Unlock()
 	if ts == 0 {
 		return 0, errors.New("device time shift is not set")
 	}
-	return now - TimeStamp(ts), nil
+	if ts >= now {
+		return 0, errors.New("invalid device time shift")
+	}
+	return now - ts, nil
 }
 
 func (d *Device) Now() (TimeStamp, error) {
-	return d.GetTimeStamp(Now())
+	return d.TimeStamp(Now())
 }
 
 func (d *Device) SetTimeShift(now TimeStamp, replyTS TimeStamp) error {
@@ -108,22 +191,29 @@ func (d *Device) SetTimeShift(now TimeStamp, replyTS TimeStamp) error {
 		return errors.New("device time cannot be in future")
 	}
 	ts := now - replyTS
-	atomic.StoreUint32(&d.timeShift, uint32(ts))
+	d.Lock()
+	d.timeShift = ts
+	d.Unlock()
 	return nil
 }
 
 func (d *Device) UpdatedAt() TimeStamp {
-	ts := atomic.LoadUint32((*uint32)(&d.updatedAt))
-	return TimeStamp(ts)
+	d.Lock()
+	defer d.Unlock()
+	return d.updatedAt
 }
 
 func (d *Device) SetUpdatedNow() {
 	now := Now()
-	atomic.StoreUint32((*uint32)(&d.updatedAt), uint32(now))
+	d.Lock()
+	d.updatedAt = now
+	d.Unlock()
 }
 
 func (d *Device) UpdatedIn() TimeStamp {
-	ts := atomic.LoadUint32((*uint32)(&d.updatedAt))
+	d.Lock()
+	ts := d.updatedAt
+	d.Unlock()
 	now := Now()
 	if ts == 0 || now <= TimeStamp(ts) {
 		return 0
@@ -133,17 +223,23 @@ func (d *Device) UpdatedIn() TimeStamp {
 
 func (d *Device) SetStateChangedNow() {
 	now := Now()
-	atomic.StoreUint32((*uint32)(&d.stateChangedAt), uint32(now))
+	d.Lock()
+	d.stateChangedAt = now
+	d.Unlock()
 }
 
 func (d *Device) SetStatePublishedNow() {
 	now := Now()
-	atomic.StoreUint32((*uint32)(&d.statePublishedAt), uint32(now))
+	d.Lock()
+	d.statePublishedAt = now
+	d.Unlock()
 }
 
 func (d *Device) StateChangeUnpublished() bool {
-	cts := atomic.LoadUint32((*uint32)(&d.stateChangedAt))
-	pts := atomic.LoadUint32((*uint32)(&d.statePublishedAt))
+	d.Lock()
+	cts := d.stateChangedAt
+	pts := d.statePublishedAt
+	d.Unlock()
 	return cts > pts
 }
 
@@ -166,15 +262,15 @@ func (dm Devices) SetStage(stage DeviceStage, check CheckDevice) {
 }
 
 func DeviceFound(d *Device) bool {
-	return d.GetStage() >= Found
+	return d.Stage() >= Found
 }
 
 func DeviceValid(d *Device) bool {
-	return d.GetStage() >= Valid
+	return d.Stage() >= Valid
 }
 
 func DeviceUpdated(d *Device) bool {
-	return d.GetStage() >= Updated
+	return d.Stage() >= Updated
 }
 
 func AnyDevice(_ *Device) bool {
@@ -182,7 +278,7 @@ func AnyDevice(_ *Device) bool {
 }
 
 func DeviceNeedsUpdate(d *Device) bool {
-	return d.GetStage() < Updated
+	return d.Stage() < Updated
 }
 
 func DeviceOutdated(timeout TimeStamp) CheckDevice {

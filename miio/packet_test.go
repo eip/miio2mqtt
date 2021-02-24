@@ -967,37 +967,3 @@ func packetFromHex(s string) *Packet {
 	}
 	return p
 }
-
-func Test_FailDecode(t *testing.T) {
-	tests := []struct {
-		name  string
-		data  []byte
-		token []byte
-		want  *Packet
-		err   error
-	}{
-		// {
-		// 	name: "Fail Hello Packet",
-		// 	data: h.FromHex("21310020ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-		// 	want: NewHelloPacket(),
-		// },
-		{
-			name:  "Fail Real Packet",
-			data:  h.FromHex("2131005000000000047bd1b5002feedece53f7b9e63ae50c3fc22fac87cc3ee7053510f79d4e36f4ff504d8da4391c467b067c3d5a777aca3ed402f9009821176bc6bffeb40994d5e6889e48836d54a6"),
-			token: h.FromHex("9c3b2d1da5beceee2808a3d3653b485d"),
-			want:  NewPacket(0x047bd1b5, 0x002feede, []byte(`{"xresult":["on","on",4,100,"off","on"],"id":1}`)),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := Decode(tt.data, tt.token)
-			h.AssertError(t, err, tt.err)
-			h.AssertEqual(t, got, tt.want)
-			// fmt.Printf("%%s:  %s\n", got)
-			// fmt.Printf("%%q:  %q\n", got)
-			// fmt.Printf("%%v:  %v\n", got)
-			// fmt.Printf("%%+v: %+v\n", got)
-			// fmt.Printf("%%#v: %#v\n", got)
-		})
-	}
-}

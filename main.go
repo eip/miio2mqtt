@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"os/signal"
@@ -59,9 +58,13 @@ func run(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	updates := make(chan *miio.Device, 2*len(devices))
+	communicator := net.NewCommunicator(config.C)
+
+	client := mqtt.NewClient(config.C)
+	defer client.Disconnect()
+	updates := make(chan *miio.Device, 2*len(devices)) // TODO check chan max length
 	wg.Add(1)
-	go func() { defer wg.Done(); publishUpdates(ctx, updates) }()
+	go func() { defer wg.Done(); publishUpdates(ctx, client, updates) }()
 
 	deviceUpdateTimeout := 2 * miio.TimeStamp(config.C.PollInterval/time.Second)
 	for {
@@ -81,13 +84,13 @@ func run(ctx context.Context) error {
 		}
 		devices.SetStage(miio.Undiscovered, miio.DeviceOutdated(deviceUpdateTimeout))
 		devices.SetStage(miio.Valid, miio.DeviceUpdated)
-		listener, err := net.StartListener(ctx, &wg)
+		err := communicator.Start(ctx, &wg)
 		if err != nil {
 			log.Printf("[WARN] unable to listen for UDP packets: %v", err)
 			continue
 		}
-		err = net.PollDevices(ctx, listener, devices, updates)
-		listener.Stop()
+		err = net.PollDevices(ctx, communicator, devices, updates)
+		communicator.Stop()
 		if err != nil {
 			log.Printf("[WARN] unable to update all devices: %v", err)
 			// return err
@@ -115,20 +118,12 @@ func initDevices() {
 			log.Printf("[WARN] duplicate device: %s (%08x) >>> %s", n, id, d.Name)
 			continue
 		}
-		d := miio.Device{
-			DeviceCfg: dc,
-			Name:      n,
-		}
-		token, _ := hex.DecodeString(dc.Token)
-		copy(d.Token[:], token)
-		d.SetStage(miio.Undiscovered)
-		devices[id] = &d
+		devices[id] = miio.NewDevice(dc, n)
 	}
 }
 
-func publishUpdates(ctx context.Context, updates <-chan *miio.Device) {
-	client := mqtt.NewClient()
-	defer client.Disconnect()
+func publishUpdates(ctx context.Context, client *mqtt.Client, updates <-chan *miio.Device) {
+	// defer client.Disconnect()
 	for {
 		select {
 		case <-ctx.Done():
