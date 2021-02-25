@@ -12,20 +12,26 @@ import (
 )
 
 type Client struct {
-	mqtt   mqtt.Client
 	config *config.Config
+	mqtt   mqtt.Client
 }
+
+var mqttFactory = mqtt.NewClient
 
 func NewClient(config *config.Config) *Client {
 	client := &Client{config: config}
-	opts := mqtt.NewClientOptions()
-	opts.AddBroker(config.Mqtt.BrokerURL)
-	opts.SetClientID(fmt.Sprintf("miio2mqtt-%x", time.Now().UnixNano()%0x1000000))
-	opts.SetConnectTimeout(config.PushTimeout)
-	opts.SetAutoReconnect(false)
-	opts.SetConnectionLostHandler(client.connectionLostHandler())
-	client.mqtt = mqtt.NewClient(opts)
+	client.mqtt = mqttFactory(client.createOptions())
 	return client
+}
+
+func (c *Client) createOptions() *mqtt.ClientOptions {
+	opts := mqtt.NewClientOptions()
+	opts.AddBroker(c.config.Mqtt.BrokerURL)
+	opts.SetClientID(fmt.Sprintf("miio2mqtt-%06x", time.Now().UnixNano()%0x1000000))
+	opts.SetConnectTimeout(c.config.PushTimeout)
+	opts.SetAutoReconnect(false)
+	opts.SetConnectionLostHandler(c.connectionLostHandler())
+	return opts
 }
 
 func (c *Client) Connect() error {
@@ -35,8 +41,7 @@ func (c *Client) Connect() error {
 	log.Printf("[DEBUG] connecting to %v...", c.config.Mqtt.BrokerURL)
 	token := c.mqtt.Connect()
 	if token.Wait() && token.Error() != nil {
-		err := token.Error()
-		return err
+		return token.Error()
 	}
 	log.Printf("[DEBUG] connected to %v", c.config.Mqtt.BrokerURL)
 	return nil
