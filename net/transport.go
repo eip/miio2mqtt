@@ -106,6 +106,7 @@ func (t *UDPTransport) listenUDPPackets(ctx context.Context) {
 			return
 		case t.packets <- &UDPPacket{Address: *addr, Data: buffer[:n], TimeStamp: pktTime}:
 			log.Printf("[DEBUG] %d bytes received from %v", n, addr)
+			t.config.UpdateChanStat(len(t.packets), 0)
 		}
 	}
 }

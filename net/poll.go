@@ -257,6 +257,7 @@ func (p *Poller) processReply(pkt *UDPPacket) bool {
 		d.SetStage(miio.Updated)
 		if d.StateChangeUnpublished() {
 			p.updates <- d
+			p.config.UpdateChanStat(0, len(p.updates))
 		}
 		return true
 	default:

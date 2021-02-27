@@ -32,6 +32,7 @@ type Config struct {
 	Devices       map[string]miio.DeviceCfg   `yaml:"Devices"`
 	Properties    map[interface{}]interface{} `yaml:"Properties"`
 	Debug         bool                        `yaml:"Debug"`
+	ChanStat      []int
 }
 
 type MqttOptions struct {
@@ -96,4 +97,16 @@ func (c *Config) validate() error {
 	// yml, err := yaml.Marshal(C)
 	// log.Print(string(yml), err)
 	return nil
+}
+
+func (c *Config) UpdateChanStat(packets, updates int) {
+	if c.ChanStat == nil {
+		c.ChanStat = make([]int, 2)
+	}
+	if packets > c.ChanStat[0] {
+		c.ChanStat[0] = packets
+	}
+	if updates > c.ChanStat[1] {
+		c.ChanStat[1] = updates
+	}
 }

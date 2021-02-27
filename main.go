@@ -79,6 +79,7 @@ func run(ctx context.Context, config *config.Config) error {
 		}
 		select {
 		case <-ctx.Done():
+			log.Printf("[INFO] max queue lengths: packets = %d, updates = %d", config.ChanStat[0], config.ChanStat[1])
 			return nil
 		case <-time.After(next.Sub(time.Now())):
 		}
