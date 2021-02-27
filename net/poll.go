@@ -21,7 +21,7 @@ type Poller struct {
 }
 
 func NewPoller(config *config.Config, transport *UDPTransport, devices miio.Devices) *Poller {
-	updates := make(chan *miio.Device, 2*len(devices)) // TODO check chan max length
+	updates := make(chan *miio.Device, 1+2*len(config.Devices)) // TODO check chan max length
 	return &Poller{config: config, transport: transport, devices: devices, updates: updates}
 }
 
@@ -41,14 +41,14 @@ func (p *Poller) PollDevices(ctx context.Context) error {
 	go func() { defer wg.Done(); p.sendPackets(ctx) }()
 
 	log.Print("[DEBUG] start updating devices")
-	var pkt UDPPacket
+	var pkt *UDPPacket
 loop:
 	for {
 		select {
 		case <-ctx.Done():
 			log.Print("[DEBUG] updating devices done")
 			break loop
-		case pkt = <-p.transport.Packets:
+		case pkt = <-p.transport.Packets():
 		}
 		if len(pkt.Data) == 32 {
 			p.processHelloReply(pkt)
@@ -156,7 +156,7 @@ func (p *Poller) sendPackets(ctx context.Context) {
 	}
 }
 
-func (p *Poller) processHelloReply(pkt UDPPacket) bool {
+func (p *Poller) processHelloReply(pkt *UDPPacket) bool {
 	did, iaddr, saddr, err := getDeviceIDAndAddress(pkt)
 	if err != nil {
 		log.Printf("[WARN] invalid packet received from %s: %x (%v)", saddr, pkt.Data, err)
@@ -195,7 +195,7 @@ func (p *Poller) processHelloReply(pkt UDPPacket) bool {
 	return true
 }
 
-func (p *Poller) processReply(pkt UDPPacket) bool {
+func (p *Poller) processReply(pkt *UDPPacket) bool {
 	did, _, saddr, err := getDeviceIDAndAddress(pkt)
 	if err != nil {
 		log.Printf("[WARN] invalid packet received from %s: %x (%v)", saddr, pkt.Data, err)
@@ -288,7 +288,7 @@ func (p *Poller) fixProperty(value interface{}) interface{} {
 	return value
 }
 
-func getDeviceIDAndAddress(pkt UDPPacket) (did uint32, iaddr uint32, saddr string, err error) {
+func getDeviceIDAndAddress(pkt *UDPPacket) (did uint32, iaddr uint32, saddr string, err error) {
 	saddr = pkt.Address.IP.String()
 	did, err = miio.GetDeviceID(pkt.Data)
 	if err != nil {

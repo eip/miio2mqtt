@@ -17,8 +17,8 @@ type UDPTransport struct {
 	LocalAddress     *net.UDPAddr
 	BroadcastAddress *net.UDPAddr
 	Connection       *net.UDPConn
-	Packets          chan UDPPacket
 	config           *config.Config
+	packets          chan *UDPPacket
 	cancel           context.CancelFunc
 }
 
@@ -42,8 +42,7 @@ func (t *UDPTransport) Start(ctx context.Context, wg *sync.WaitGroup) error {
 	if err != nil {
 		return err
 	}
-	chanLength := 4 * (len(t.config.Devices) + 1)
-	t.Packets = make(chan UDPPacket, chanLength) // TODO check chan max length
+	t.packets = make(chan *UDPPacket, 1+2*len(t.config.Devices)) // TODO check chan max length
 	ctx, cancel := context.WithCancel(ctx)
 	t.cancel = cancel
 	// defer listener.cancel()
@@ -58,7 +57,11 @@ func (t *UDPTransport) Stop() {
 		log.Printf("[ERROR] %v", err)
 	}
 	t.purgePackets()
-	t.Packets = nil
+	t.packets = nil
+}
+
+func (t *UDPTransport) Packets() <-chan *UDPPacket {
+	return t.packets
 }
 
 func (t *UDPTransport) purgePackets() {
@@ -66,7 +69,7 @@ func (t *UDPTransport) purgePackets() {
 loop:
 	for {
 		select {
-		case <-t.Packets:
+		case <-t.packets:
 			count++
 		default:
 			break loop
@@ -101,7 +104,7 @@ func (t *UDPTransport) listenUDPPackets(ctx context.Context) {
 			log.Print("[DEBUG] stop listening for UDP packets")
 			t.Stop()
 			return
-		case t.Packets <- UDPPacket{Address: *addr, Data: buffer[:n], TimeStamp: pktTime}:
+		case t.packets <- &UDPPacket{Address: *addr, Data: buffer[:n], TimeStamp: pktTime}:
 			log.Printf("[DEBUG] %d bytes received from %v", n, addr)
 		}
 	}
