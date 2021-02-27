@@ -27,14 +27,15 @@ func init() {
 
 func main() {
 	setupLog(false)
+	config := config.New()
 	if err := config.Load("./config.yml"); err != nil {
 		log.Printf("[ERROR] configuration: %v", err)
 		return
 	}
-	if config.C.Debug {
+	if config.Debug {
 		setupLog(true)
 	}
-	initDevices()
+	initDevices(config)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { // catch signal and invoke graceful termination
 		sigChan := make(chan os.Signal, 1)
@@ -45,7 +46,7 @@ func main() {
 		cancel()
 	}()
 	fmt.Printf("miio2mqtt version %s", version)
-	if err := run(ctx); err != nil {
+	if err := run(ctx, config); err != nil {
 		log.Printf("[ERROR] %v", err)
 		time.Sleep(1 * time.Second)
 		os.Exit(1)
@@ -53,22 +54,21 @@ func main() {
 	log.Print("[DEBUG] miio2mqtt finished")
 }
 
-func run(ctx context.Context) error {
+func run(ctx context.Context, config *config.Config) error {
 	firstLoop := true
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	communicator := net.NewCommunicator(config.C)
-
-	client := mqtt.NewClient(config.C)
-	defer client.Disconnect()
-	updates := make(chan *miio.Device, 2*len(devices)) // TODO check chan max length
+	transport := net.NewTransport(config)
+	poller := net.NewPoller(config, transport, devices)
+	broker := mqtt.NewClient(config)
+	defer broker.Disconnect()
 	wg.Add(1)
-	go func() { defer wg.Done(); publishUpdates(ctx, client, updates) }()
+	go func() { defer wg.Done(); publishUpdates(ctx, broker, poller.Updates()) }()
 
-	deviceUpdateTimeout := 2 * miio.TimeStamp(config.C.PollInterval/time.Second)
+	deviceUpdateTimeout := 2 * miio.TimeStamp(config.PollInterval/time.Second)
 	for {
-		next := nextTime(time.Now())
+		next := nextTime(time.Now(), config.PollInterval, config.PollAheadTime)
 		if firstLoop {
 			startIn := next.Sub(time.Now()) / 100 / time.Millisecond * 100 * time.Millisecond
 			if startIn > 1550*time.Millisecond {
@@ -84,13 +84,13 @@ func run(ctx context.Context) error {
 		}
 		devices.SetStage(miio.Undiscovered, miio.DeviceOutdated(deviceUpdateTimeout))
 		devices.SetStage(miio.Valid, miio.DeviceUpdated)
-		err := communicator.Start(ctx, &wg)
+		err := transport.Start(ctx, &wg)
 		if err != nil {
 			log.Printf("[WARN] unable to listen for UDP packets: %v", err)
 			continue
 		}
-		err = net.PollDevices(ctx, communicator, devices, updates)
-		communicator.Stop()
+		err = poller.PollDevices(ctx)
+		transport.Stop()
 		if err != nil {
 			log.Printf("[WARN] unable to update all devices: %v", err)
 			// return err
@@ -100,9 +100,9 @@ func run(ctx context.Context) error {
 	}
 }
 
-func initDevices() {
+func initDevices(config *config.Config) {
 	idx := 0
-	for n, dc := range config.C.Devices {
+	for n, dc := range config.Devices {
 		idx++
 		var id uint32
 		if len(dc.Address) > 0 {
@@ -137,10 +137,10 @@ func publishUpdates(ctx context.Context, client *mqtt.Client, updates <-chan *mi
 	}
 }
 
-func nextTime(now time.Time) time.Time {
-	result := now.Add(config.C.PollInterval).Truncate(config.C.PollInterval).Add(-config.C.PollAheadTime)
+func nextTime(now time.Time, interval time.Duration, aheadTime time.Duration) time.Time {
+	result := now.Add(interval).Truncate(interval).Add(-aheadTime)
 	if result.Before(now) {
-		return result.Add(config.C.PollInterval)
+		return result.Add(interval)
 	}
 	return result
 }

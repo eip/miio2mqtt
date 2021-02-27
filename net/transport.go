@@ -13,14 +13,13 @@ import (
 const udpNetwork = "udp4"
 const errNetClosingString = "use of closed network connection" // defined in internal/poll package
 
-type UDPCommunicator struct {
+type UDPTransport struct {
 	LocalAddress     *net.UDPAddr
 	BroadcastAddress *net.UDPAddr
 	Connection       *net.UDPConn
 	Packets          chan UDPPacket
-	ctx              context.Context
-	cancel           context.CancelFunc
 	config           *config.Config
+	cancel           context.CancelFunc
 }
 
 type UDPPacket struct {
@@ -29,44 +28,45 @@ type UDPPacket struct {
 	TimeStamp miio.TimeStamp
 }
 
-func NewCommunicator(config *config.Config) *UDPCommunicator {
-	return &UDPCommunicator{config: config}
+func NewTransport(config *config.Config) *UDPTransport {
+	return &UDPTransport{config: config}
 }
 
-func (c *UDPCommunicator) Start(ctx context.Context, wg *sync.WaitGroup) error {
+func (t *UDPTransport) Start(ctx context.Context, wg *sync.WaitGroup) error {
 	var err error
-	c.LocalAddress, c.BroadcastAddress, err = GetUDPAddresses(c.config.MiioPort)
+	t.LocalAddress, t.BroadcastAddress, err = GetUDPAddresses(t.config.MiioPort)
 	if err != nil {
 		return err
 	}
-	c.Connection, err = net.ListenUDP(udpNetwork, c.LocalAddress)
+	t.Connection, err = net.ListenUDP(udpNetwork, t.LocalAddress)
 	if err != nil {
 		return err
 	}
-	chanLength := 4 * (len(c.config.Devices) + 1)
-	c.Packets = make(chan UDPPacket, chanLength) // TODO check chan max length
-	c.ctx, c.cancel = context.WithCancel(ctx)
+	chanLength := 4 * (len(t.config.Devices) + 1)
+	t.Packets = make(chan UDPPacket, chanLength) // TODO check chan max length
+	ctx, cancel := context.WithCancel(ctx)
+	t.cancel = cancel
 	// defer listener.cancel()
 	wg.Add(1)
-	go func() { defer wg.Done(); c.listenUDPPackets() }()
+	go func() { defer wg.Done(); t.listenUDPPackets(ctx) }()
 	return nil
 }
 
-func (c *UDPCommunicator) Stop() {
-	c.cancel()
-	if err := c.Connection.Close(); err != nil {
+func (t *UDPTransport) Stop() {
+	t.cancel()
+	if err := t.Connection.Close(); err != nil {
 		log.Printf("[ERROR] %v", err)
 	}
-	c.purge()
-	c.Packets = nil
+	t.purgePackets()
+	t.Packets = nil
 }
 
-func (c *UDPCommunicator) purge() {
+func (t *UDPTransport) purgePackets() {
 	count := 0
 loop:
 	for {
 		select {
-		case <-c.Packets:
+		case <-t.Packets:
 			count++
 		default:
 			break loop
@@ -77,19 +77,19 @@ loop:
 	}
 }
 
-func (c *UDPCommunicator) listenUDPPackets() {
-	log.Printf("[DEBUG] listening %v for UDP packets...", c.Connection.LocalAddr())
+func (t *UDPTransport) listenUDPPackets(ctx context.Context) {
+	log.Printf("[DEBUG] listening %v for UDP packets...", t.Connection.LocalAddr())
 	// defer close(udpPackets)
 	buffer := make([]byte, 1024)
 	for {
-		n, addr, err := c.Connection.ReadFromUDP(buffer)
+		n, addr, err := t.Connection.ReadFromUDP(buffer)
 		if err != nil {
 			if nerr, ok := err.(*net.OpError); ok && nerr.Err.Error() == errNetClosingString {
 				log.Print("[DEBUG] stop listening for UDP packets")
 				return
 			}
 			log.Printf("[WARN] %v", err)
-			if c.ctx.Err() != nil { // ctx was done
+			if ctx.Err() != nil { // ctx was done
 				log.Print("[DEBUG] stop listening for UDP packets")
 				return
 			}
@@ -97,11 +97,11 @@ func (c *UDPCommunicator) listenUDPPackets() {
 		}
 		pktTime := miio.Now()
 		select {
-		case <-c.ctx.Done():
+		case <-ctx.Done():
 			log.Print("[DEBUG] stop listening for UDP packets")
-			c.Stop()
+			t.Stop()
 			return
-		case c.Packets <- UDPPacket{Address: *addr, Data: buffer[:n], TimeStamp: pktTime}:
+		case t.Packets <- UDPPacket{Address: *addr, Data: buffer[:n], TimeStamp: pktTime}:
 			log.Printf("[DEBUG] %d bytes received from %v", n, addr)
 		}
 	}

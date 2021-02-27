@@ -196,10 +196,10 @@ func TestLoad(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			C = nil
-			err := Load(tt.arg)
+			config := New()
+			err := config.Load(tt.arg)
 			h.AssertError(t, err, tt.err)
-			h.AssertEqual(t, C, tt.want)
+			h.AssertEqual(t, config, tt.want)
 		})
 	}
 }

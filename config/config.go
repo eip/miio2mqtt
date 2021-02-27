@@ -38,9 +38,6 @@ type MqttOptions struct {
 	BrokerURL string `yaml:"BrokerURL"`
 }
 
-// C is the application configuration
-var C *Config
-
 func New() *Config {
 	return &Config{
 		PollInterval:  defaultPollInterval,
@@ -60,8 +57,7 @@ func New() *Config {
 }
 
 // Load configuration from yaml file
-func Load(path string) error {
-	C = New()
+func (c *Config) Load(path string) error {
 	if len(path) == 0 {
 		return errors.New("empty configuration file path")
 	}
@@ -74,10 +70,10 @@ func Load(path string) error {
 	if err != nil {
 		return err
 	}
-	if err = C.parse(data); err != nil {
+	if err = c.parse(data); err != nil {
 		return err
 	}
-	return C.validate()
+	return c.validate()
 }
 
 func (c *Config) parse(data []byte) error {
