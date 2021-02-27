@@ -3,6 +3,7 @@ module github.com/eip/miio2mqtt
 go 1.15
 
 require (
+	github.com/arl/statsviz v0.3.0 // indirect
 	github.com/c-bata/go-prompt v0.2.5
 	github.com/eclipse/paho.mqtt.golang v1.3.2
 	github.com/go-pkgz/lgr v0.10.4
