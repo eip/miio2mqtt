@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	defaultPollInterval  = 5 * time.Second
-	defaultPollAheadTime = 1 * time.Millisecond
-	defaultPollTimeout   = 1 * time.Second
-	defaultPushTimeout   = 1 * time.Second
+	defaultPollInterval  = 10 * time.Second
+	defaultPollAheadTime = 10 * time.Millisecond
+	defaultPollTimeout   = 5 * time.Second
+	defaultPushTimeout   = 4 * time.Second
 	defaultMiioPort      = 54321
 )
 
