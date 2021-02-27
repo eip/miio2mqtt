@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	prompt "github.com/c-bata/go-prompt"
+	"github.com/eip/miio2mqtt/config"
 	"github.com/eip/miio2mqtt/miio"
+	"github.com/eip/miio2mqtt/net"
 )
 
 var suggestions = []prompt.Suggest{
@@ -22,15 +26,47 @@ var suggestions = []prompt.Suggest{
 	{Text: "token", Description: "<token> set device token"},
 }
 
-type context struct {
-	device *miio.Device
+type application struct {
+	deviceCfg *miio.DeviceCfg
+	device    *miio.Device
+	devices   miio.Devices
+	transport *net.UDPTransport
+	poller    *net.Poller
 }
 
-var ctx = &context{
-	device: &miio.Device{},
+var app = &application{
+	deviceCfg: &miio.DeviceCfg{},
 }
 
-var console = prompt.NewStdoutWriter()
+func identifyDevice(dc *miio.DeviceCfg) error {
+	var id uint32
+	if len(dc.Address) > 0 {
+		id, _ = net.IPv4StrToInt(dc.Address)
+	} else if dc.ID > 0 {
+		id = dc.ID
+	}
+	if id == 0 {
+		return errors.New("Invalid device configuration")
+	}
+
+	app.device = miio.NewDevice(*dc, "Device")
+	app.device.SetFinalStage(miio.Valid)
+	app.devices[id] = app.device
+
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+	ctx := context.Background()
+	err := app.transport.Start(ctx, &wg)
+	if err != nil {
+		return fmt.Errorf("Unable to listen for UDP packets: %v", err)
+	}
+	err = app.poller.PollDevices(ctx)
+	app.transport.Stop()
+	if err != nil {
+		return fmt.Errorf("Unable to identify device: %v", err)
+	}
+	return nil
+}
 
 func printDeviceInfo(d *miio.Device) {
 	if d.ID == 0 && len(d.Address) == 0 {
@@ -47,13 +83,13 @@ func printDeviceInfo(d *miio.Device) {
 		fmt.Printf("%sAddress: %s", div, d.Address)
 		div = ", "
 	}
-	if len(d.Model) > 0 {
-		fmt.Printf("%sAddress: %s", div, d.Model)
+	if len(d.Model()) > 0 {
+		fmt.Printf("%sModel: %s", div, d.Model())
 	}
-	fmt.Printf("%sToken: %x\n", div, d.Token)
+	fmt.Printf("%sToken: %x\n", div, d.Token())
 }
 
-func setDeviceID(d *miio.Device, val string) error {
+func setDeviceID(d *miio.DeviceCfg, val string) error {
 	if id, _ := strconv.ParseUint(val, 0, 32); id != 0 {
 		d.ID = uint32(id)
 		return nil
@@ -61,28 +97,36 @@ func setDeviceID(d *miio.Device, val string) error {
 	return fmt.Errorf("Invalid device ID: %q", val)
 }
 
-func setDeviceAddress(d *miio.Device, val string) error {
-	if ip := net.ParseIP(val); ip != nil {
-		d.Address = ip.String()
-		return nil
+func setDeviceAddress(d *miio.DeviceCfg, val string) error {
+	if _, err := net.IPv4StrToInt(val); err != nil {
+		return fmt.Errorf("Invalid IP address: %q", val)
 	}
-	return fmt.Errorf("Invalid IP address: %q", val)
+	d.Address = val
+	return nil
 }
 
-func setDeviceToken(d *miio.Device, val string) error {
+func setDeviceToken(d *miio.DeviceCfg, val string) error {
 	if token, _ := hex.DecodeString(val); len(token) == 16 {
-		copy(d.Token[:], token)
+		d.Token = hex.EncodeToString(token)
 		return nil
 	}
 	return fmt.Errorf("Invalid token: %q", val)
 }
 
 func livePrefix() (string, bool) {
-	if ctx.device.ID > 0 {
-		return fmt.Sprintf("%08x> ", ctx.device.ID), true
+	if app.device != nil {
+		if app.device.ID > 0 {
+			return fmt.Sprintf("%08x> ", app.device.ID), true
+		}
+		if len(app.device.Address) > 0 {
+			return fmt.Sprintf("%s> ", app.device.Address), true
+		}
 	}
-	if len(ctx.device.Address) > 0 {
-		return fmt.Sprintf("%s> ", ctx.device.Address), true
+	if app.deviceCfg.ID > 0 {
+		return fmt.Sprintf("%08x> ", app.deviceCfg.ID), true
+	}
+	if len(app.deviceCfg.Address) > 0 {
+		return fmt.Sprintf("%s> ", app.deviceCfg.Address), true
 	}
 	return "", false
 }
@@ -96,17 +140,26 @@ func executor(in string) {
 		colorPrintf(prompt.Green, "Bye!\n")
 		os.Exit(0)
 	case "info":
-		printDeviceInfo(ctx.device)
+		var err error
+		if app.device != nil && len(app.device.Model()) > 0 {
+			printDeviceInfo(app.device)
+			break
+		}
+		if err = identifyDevice(app.deviceCfg); err != nil {
+			colorPrintf(prompt.Brown, "%v\n", err)
+			break
+		}
+		printDeviceInfo(app.device)
 	case "id":
-		if err := setDeviceID(ctx.device, blocks[1]); err != nil {
+		if err := setDeviceID(app.deviceCfg, blocks[1]); err != nil {
 			colorPrintf(prompt.Brown, "%v\n", err)
 		}
 	case "ip":
-		if err := setDeviceAddress(ctx.device, blocks[1]); err != nil {
+		if err := setDeviceAddress(app.deviceCfg, blocks[1]); err != nil {
 			colorPrintf(prompt.Brown, "%v\n", err)
 		}
 	case "token":
-		if err := setDeviceToken(ctx.device, blocks[1]); err != nil {
+		if err := setDeviceToken(app.deviceCfg, blocks[1]); err != nil {
 			colorPrintf(prompt.Brown, "%v\n", err)
 		}
 	default:
@@ -122,27 +175,8 @@ func completer(in prompt.Document) []prompt.Suggest {
 	return prompt.FilterHasPrefix(suggestions, w, true)
 }
 
-func colorPrintf(fg prompt.Color, format string, a ...interface{}) {
-	console.SetColor(fg, prompt.DefaultColor, false)
-	console.WriteStr(fmt.Sprintf(format, a...))
-	console.SetColor(prompt.DefaultColor, prompt.DefaultColor, false)
-	console.Flush()
-}
-
-func main() {
-	for i := 1; i < len(os.Args) && i < 4; i++ {
-		arg := os.Args[i]
-		if err := setDeviceID(ctx.device, arg); err == nil {
-			continue
-		}
-		if err := setDeviceAddress(ctx.device, arg); err == nil {
-			continue
-		}
-		if err := setDeviceToken(ctx.device, arg); err == nil {
-			continue
-		}
-	}
-	p := prompt.New(
+func initPrompt() *prompt.Prompt {
+	return prompt.New(
 		executor,
 		completer,
 		prompt.OptionPrefix("> "),
@@ -161,5 +195,26 @@ func main() {
 		prompt.OptionScrollbarBGColor(prompt.DarkGray),
 		prompt.OptionScrollbarThumbColor(prompt.LightGray),
 	)
-	p.Run()
+}
+
+func main() {
+	config := config.New()
+	setupLog()
+	app.devices = make(miio.Devices)
+	app.transport = net.NewTransport(config)
+	app.poller = net.NewPoller(config, app.transport, app.devices)
+
+	for i := 1; i < len(os.Args) && i < 4; i++ {
+		arg := os.Args[i]
+		if err := setDeviceID(app.deviceCfg, arg); err == nil {
+			continue
+		}
+		if err := setDeviceAddress(app.deviceCfg, arg); err == nil {
+			continue
+		}
+		if err := setDeviceToken(app.deviceCfg, arg); err == nil {
+			continue
+		}
+	}
+	initPrompt().Run()
 }
